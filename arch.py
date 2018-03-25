@@ -1,27 +1,24 @@
-import tensorflow as tf
-import numpy as np
 from utils import *
-import math
 
 FLAGS = tf.app.flags.FLAGS
 
 
 class BSRGAN(object):
-    def __init__(self, hr_dim, lr_dim, dataset_size, batch_size=64,
+    def __init__(self, hr_images, lr_images, dataset_size, batch_size=64,
                  prior_std=1.0, J=1, M=1, eta=2e-4,
                  alpha=0.01, lrate=0.0002, optimizer='adam',
                  ml=False, J_d=None):
 
         # J_d and and J are amount of theta_d and theta_g samples (see 2.1, marginalizing the noise)
-
-        assert len(hr_dim) == 3, "invalid image dims"
-        self.c_dim = hr_dim[2]  # channels
         self.optimizer = optimizer.lower()
         self.dataset_size = dataset_size
         self.batch_size = batch_size
 
-        self.hr_dim = hr_dim
-        self.lr_dim = lr_dim
+        self.hr = hr_images
+        self.lr = lr_images
+        self.hr_dim = list(hr_images.shape[1:])
+        self.lr_dim = [32, 32, 3]#list(lr_images.shape[1:])
+        self.c_dim = self.hr_dim[2]  # channels
         self.lrate = lrate
 
         # Bayes
@@ -46,8 +43,9 @@ class BSRGAN(object):
             for gi in range(self.num_gen):
                 for m in range(self.num_mcmc):
                     # get ordered dict representing params of current generator
+                    # initialization mode (params == None)
                     wgts_ = self.generator(tf.constant(0.0, dtype=tf.float32, shape=self.lr_sampler.shape),
-                                           params=None, return_params=True, mask='_%04d_%04d' % (gi, m))[-1]  # initialization mode (params == None)
+                                           params=None, return_params=True, mask='_%04d_%04d' % (gi, m))[-1]
 
                     #new_keys = map(lambda x: x + '_%04d_%04d' % (gi, m), wgts_.keys())
                     #wgts_ = dict(zip(new_keys, wgts_.values()))
@@ -68,9 +66,9 @@ class BSRGAN(object):
         return param_list
 
     def build_bgan_graph(self):
-        self.hr = tf.placeholder(tf.float32, [self.batch_size] + self.hr_dim, name='real_images')
+        #self.hr = tf.placeholder(tf.float32, [self.batch_size] + self.hr_dim, name='real_images')
         # define placeholder for LR images
-        self.lr = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim + [self.num_gen], name='lr_images')
+        #self.lr = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim + [self.num_gen], name='lr_images')
         self.lr_sampler = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim, name='lr_sampler')
 
         # initialize generator weights
@@ -140,7 +138,6 @@ class BSRGAN(object):
         for gi, gen_params in enumerate(self.gen_param_list):
 
             gi_losses = []
-            # TODO: rebuild discriminator
             for disc_params in self.disc_param_list:
                 d_probs_, d_logits_, d_features_fake = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
                                                                                          gen_params), disc_params)
@@ -207,10 +204,11 @@ class BSRGAN(object):
 
         # Last layer is sigmoid with no batch normalization
         model.add_conv2d(3, mapsize=1, stride=1, stddev_factor=1.)
-        model.add_sigmoid()  # TODO: add tanh
+        # model.add_sigmoid()
+        model.add_tanh()
 
         gene_vars = model.params
-        #model.summarize()
+        #model.summary()
         if return_params:
             return model.get_output(), gene_vars
         return model.get_output()
@@ -221,7 +219,7 @@ class BSRGAN(object):
         mapsize = 3
         layers = [64, 128, 256, 512]
 
-        model = Model('d', 2 * disc_input - 1, params, mask)  # normalize between -1 and 1
+        model = Model('d', 2 * disc_input - 1, params, mask)  # scale between -1 and 1
 
         for layer in range(len(layers)):
             nunits = layers[layer]
@@ -252,7 +250,7 @@ class BSRGAN(object):
         model.add_softmax()
 
         disc_vars = model.params
-        # model.summarize()
+        # model.summary()
         if return_params:
             return model.get_output(), h_out, h_end, disc_vars
         return model.get_output(), h_out, h_end

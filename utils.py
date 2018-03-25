@@ -2,15 +2,15 @@
 import numpy as np
 import tensorflow as tf
 from collections import OrderedDict
-
+import tensorflow.contrib.slim as slim
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import os
 FLAGS = tf.app.flags.FLAGS
 
 
 class Model(object):
-    """A neural network model.
-
-    Currently only supports a feedforward architecture."""
-
+    """A neural network model."""
     def __init__(self, name, inputs, params, mask):
         self.name = name
         self.mask = mask
@@ -80,7 +80,7 @@ class Model(object):
         See ArXiv 1502.03167v3 for details."""
 
         # TBD: This appears to be very flaky, often raising InvalidArgumentError internally
-        with tf.variable_scope(self._get_layer_str() + self.mask, reuse=tf.AUTO_REUSE):
+        with tf.variable_scope(self._get_layer_str() + '_batch_norm' + self.mask, reuse=tf.AUTO_REUSE):
             out = tf.layers.batch_normalization(self.get_output(), scale=scale)
 
         self.outputs.append(out)
@@ -127,6 +127,12 @@ class Model(object):
         """Adds a sigmoid (0,1) activation function layer to this model."""
 
         out = tf.nn.sigmoid(self.get_output())
+        self.outputs.append(out)
+        return self
+
+    def add_tanh(self):
+        """Adds a tanh (-1, 1) activation function layer to this model"""
+        out = tf.nn.tanh(self.get_output())
         self.outputs.append(out)
         return self
 
@@ -179,7 +185,7 @@ class Model(object):
         assert len(
             self.get_output().get_shape()) == 4 and "Previous layer must be 4-dimensional (batch, width, height, channels)"
 
-        layer_name = self._get_layer_str()
+        layer_name = self._get_layer_str() + '_conv'
         if self.init:
             with tf.variable_scope(layer_name + self.mask, reuse=tf.AUTO_REUSE):
                 prev_units = self._get_num_inputs()
@@ -207,7 +213,7 @@ class Model(object):
 
         assert len(self.get_output().get_shape()) == 4 and "Previous layer must be 4-dimensional (batch, width, height, channels)"
 
-        layer_name = self._get_layer_str()
+        layer_name = self._get_layer_str() + '_tconv'
         prev_output = self.get_output()
         output_shape = [FLAGS.batch_size,
                         int(prev_output.get_shape()[1]) * stride,
@@ -347,12 +353,55 @@ class Model(object):
         """Returns the output from the topmost layer of the network"""
         return self.outputs[-1]
 
-    def summarize(self):
+    def summary(self):
         for key in self.params.keys():
             print key, self.params[key].shape
 
 
-def _downscale(images, K):
+def vgg_19(inputs, num_classes=1000, is_training=False, dropout_keep_prob=0.5, spatial_squeeze=True,
+           scope='vgg_19', reuse=False, fc_conv_padding='VALID'):
+    """Oxford Net VGG 19-Layers version E Example.
+    Note: All the fully_connected layers have been transformed to conv2d layers.
+        To use in classification mode, resize input to 224x224.
+    Args:
+    inputs: a tensor of size [batch_size, height, width, channels].
+    num_classes: number of predicted classes.
+    is_training: whether or not the model is being trained.
+    dropout_keep_prob: the probability that activations are kept in the dropout
+      layers during training.
+    spatial_squeeze: whether or not should squeeze the spatial dimensions of the
+      outputs. Useful to remove unnecessary dimensions for classification.
+    scope: Optional scope for the variables.
+    fc_conv_padding: the type of padding to use for the fully connected layer
+      that is implemented as a convolutional layer. Use 'SAME' padding if you
+      are applying the network in a fully convolutional manner and want to
+      get a prediction map downsampled by a factor of 32 as an output. Otherwise,
+      the output prediction map will be (input / 32) - 6 in case of 'VALID' padding.
+    Returns:
+    the last op containing the log predictions and end_points dict.
+    """
+    with tf.variable_scope(scope, 'vgg_19', [inputs], reuse=reuse) as sc:
+        end_points_collection = sc.name + '_end_points'
+        # Collect outputs for conv2d, fully_connected and max_pool2d.
+        with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d], outputs_collections=end_points_collection):
+            net = slim.repeat(inputs, 2, slim.conv2d, 64, 3, scope='conv1', reuse=reuse)
+            net = slim.max_pool2d(net, [2, 2], scope='pool1')
+            net = slim.repeat(net, 2, slim.conv2d, 128, 3, scope='conv2',reuse=reuse)
+            net = slim.max_pool2d(net, [2, 2], scope='pool2')
+            net = slim.repeat(net, 4, slim.conv2d, 256, 3, scope='conv3', reuse=reuse)
+            net = slim.max_pool2d(net, [2, 2], scope='pool3')
+            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv4',reuse=reuse)
+            net = slim.max_pool2d(net, [2, 2], scope='pool4')
+            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv5',reuse=reuse)
+            net = slim.max_pool2d(net, [2, 2], scope='pool5')
+            # Use conv2d instead of fully_connected layers.
+            # Convert end_points_collection into a end_point dict.
+            end_points = slim.utils.convert_collection_to_dict(end_points_collection)
+
+    return net, end_points
+
+
+def downscale(images, K):
     """Differentiable image downscaling by a factor of K"""
     arr = np.zeros([K, K, 3, 3])
     arr[:, :, 0, 0] = 1.0 / (K * K)
@@ -372,3 +421,44 @@ def huber_loss(labels, predictions, delta=1.0):
     small_res = 0.5 * tf.square(residual)
     large_res = delta * residual - 0.5 * tf.square(delta)
     return tf.where(condition, small_res, large_res)
+
+
+def print_images(sampled_images, label, index, directory, save_all_samples=False):
+    mpl.use('Agg')  # for server side
+
+    def unnormalize(img, cdim):
+        img_out = np.zeros_like(img)
+        for i in xrange(cdim):
+            img_out[:, :, i] = 255. * ((img[:, :, i] + 1.) / 2.0)
+        img_out = img_out.astype(np.uint8)
+        return img_out
+
+    if type(sampled_images) == np.ndarray:
+        N, h, w, cdim = sampled_images.shape
+        idxs = np.random.choice(np.arange(N), size=(5, 5), replace=True)
+    else:
+        sampled_imgs, sampled_probs = sampled_images
+        sampled_images = sampled_imgs[sampled_probs.argsort()[::-1]]
+        idxs = np.arange(5 * 5).reshape((5, 5))
+        N, h, w, cdim = sampled_images.shape
+
+    fig, axarr = plt.subplots(5, 5)
+    for i in range(5):
+        for j in range(5):
+            if cdim == 1:
+                axarr[i, j].imshow(unnormalize(sampled_images[idxs[i, j]], cdim)[:, :, 0], cmap="gray")
+            else:
+                axarr[i, j].imshow(unnormalize(sampled_images[idxs[i, j]], cdim))
+            axarr[i, j].axis('off')
+            axarr[i, j].set_xticklabels([])
+            axarr[i, j].set_yticklabels([])
+            axarr[i, j].set_aspect('equal')
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    fig.savefig(os.path.join(directory, "%s_%i.png" % (label, index)), bbox_inches='tight')
+    plt.close("all")
+
+    if "raw" not in label.lower() and save_all_samples:
+        np.savez_compressed(os.path.join(directory, "samples_%s_%i.npz" % (label, index)),
+                            samples=sampled_images)
