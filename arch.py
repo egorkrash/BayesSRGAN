@@ -32,7 +32,7 @@ class BSRGAN(object):
         self.eta = eta
         self.alpha = alpha
         # ML
-        self.ml = ml  # use maximum likelihood method (?)
+        self.ml = ml  # use maximum likelihood method
         if self.ml:
             assert self.num_gen == 1 and self.num_disc == 1 and self.num_mcmc == 1, "invalid settings for ML training"
 

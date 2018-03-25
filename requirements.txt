@@ -1,0 +1,4 @@
+tensorflow_gpu==1.4.0
+numpy==1.11.3
+Pillow==5.0.0
+tensorflow==1.7.0rc1
