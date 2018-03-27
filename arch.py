@@ -1,6 +1,7 @@
 from utils import *
 
 FLAGS = tf.app.flags.FLAGS
+# TODO pixelshufflers
 
 
 class BSRGAN(object):
@@ -84,7 +85,6 @@ class BSRGAN(object):
         # TODO get an understanding of m and how params are named in original bayesgan
         for di in xrange(self.num_disc):
             for m in xrange(self.num_mcmc):
-            #for _ in range(len(t_vars)):
                self.d_vars.append([var for var in t_vars if 'd_' in var.name and "_%04d_%04d" % (di, m) in var.name])
 
         # build disc losses and optimizers
@@ -93,23 +93,22 @@ class BSRGAN(object):
         for di, disc_params in enumerate(self.disc_param_list):
             # for each setting of theta_d we count losses using each setting of theta_g
             # build loss for each theta_d
-            d_probs, d_logits, _ = self.discriminator(self.hr, disc_params)
+            d_logits, _ = self.discriminator(self.hr, disc_params)
 
-            constant_labels = np.zeros((self.batch_size, 2))
-            constant_labels[:, 1] = 1.0  # real
-            d_loss_real = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=d_logits,
-                                                                                 labels=tf.constant(constant_labels)))
+            #constant_labels = np.zeros((self.batch_size, 2))
+            #constant_labels[:, 1] = 1.0  # real
+            d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
+                                                                                 labels=tf.ones_like(d_logits)))
             # TODO: why do they use softmax instead of sigmoid?
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
                 # z[:, :, gi % self.num_gen] is sample from p(z)
-                d_probs_, d_logits_, _ = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
+                d_logits_, _ = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
                                                                            gen_params), disc_params)
-                constant_labels = np.zeros((self.batch_size, 2))
-                constant_labels[:, 0] = 1.0  # class label indicating it came from generator, aka fake
-                d_loss_fake_ = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=d_logits_,
-                                                                                      labels=tf.constant(
-                                                                                          constant_labels)))
+                #constant_labels = np.zeros((self.batch_size, 2))
+                #constant_labels[:, 0] = 1.0  # class label indicating it came from generator, aka fake
+                d_loss_fake_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
+                                                                                      labels=tf.zeros_like(d_logits_)))
                 d_loss_fakes.append(d_loss_fake_)
 
             d_losses = []
@@ -131,7 +130,6 @@ class BSRGAN(object):
         self.g_vars = []
         for gi in xrange(self.num_gen):
             for m in xrange(self.num_mcmc):
-            #for _ in range(len(t_vars)):
                 self.g_vars.append([var for var in t_vars if 'g_' in var.name and "_%04d_%04d" % (gi, m) in var.name])
 
         self.g_losses, self.g_optims, self.g_optims_adam = [], [], []
@@ -139,13 +137,13 @@ class BSRGAN(object):
 
             gi_losses = []
             for disc_params in self.disc_param_list:
-                d_probs_, d_logits_, d_features_fake = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
+                d_logits_, d_features_fake = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
                                                                                          gen_params), disc_params)
-                _, _, d_features_real = self.discriminator(self.hr, disc_params)
-                constant_labels = np.zeros((self.batch_size, 2))
-                constant_labels[:, 1] = 1.0  # class label indicating that this fake is real
-                g_loss_ = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=d_logits_,
-                                                                                 labels=tf.constant(constant_labels)))
+                _, d_features_real = self.discriminator(self.hr, disc_params)
+                # constant_labels = np.zeros((self.batch_size, 2))
+                # constant_labels[:, 1] = 1.0  # class label indicating that this fake is real
+                g_loss_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
+                                                                                 labels=tf.ones_like(d_logits_)))
                 g_loss_ += tf.reduce_mean(huber_loss(d_features_real[-1], d_features_fake[-1]))
                 if not self.ml:
                     g_loss_ += self.gen_prior(gen_params) + self.gen_noise(gen_params)
@@ -196,16 +194,17 @@ class BSRGAN(object):
 
         model.add_conv2d(96, mapsize=mapsize, stride=1, stddev_factor=2.)
         # Worse: model.add_batch_norm()
+        # model.add_pixel_shuffler(2)
         model.add_relu()
 
         model.add_conv2d(96, mapsize=1, stride=1, stddev_factor=2.)
         # Worse: model.add_batch_norm()
+        # model.add_pixel_shuffler(2)
         model.add_relu()
 
         # Last layer is sigmoid with no batch normalization
         model.add_conv2d(3, mapsize=1, stride=1, stddev_factor=1.)
-        # model.add_sigmoid()
-        model.add_tanh()
+        model.add_sigmoid()
 
         gene_vars = model.params
         #model.summary()
@@ -215,7 +214,6 @@ class BSRGAN(object):
 
     @staticmethod
     def discriminator(disc_input, params=None, return_params=False, mask='_0000_0000'):
-        # Fully convolutional model
         mapsize = 3
         layers = [64, 128, 256, 512]
 
@@ -245,15 +243,14 @@ class BSRGAN(object):
         model.add_dense(100, stddev_factor=2)
         model.add_relu()
         h_end = model.get_output()
-        model.add_dense(2)
+        model.add_dense(1)
         h_out = model.get_output()
-        model.add_softmax()
 
         disc_vars = model.params
         # model.summary()
         if return_params:
-            return model.get_output(), h_out, h_end, disc_vars
-        return model.get_output(), h_out, h_end
+            return h_out, h_end, disc_vars
+        return h_out, h_end
 
     def gen_prior(self, gen_params):
         prior_loss = 0.0

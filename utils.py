@@ -46,6 +46,14 @@ class Model(object):
         return weights
 
     @staticmethod
+    def phase_shift(inputs, scale, shape_1, shape_2):
+        # Tackle the condition when the batch is None
+        X = tf.reshape(inputs, shape_1)
+        X = tf.transpose(X, [0, 1, 3, 2, 4])
+
+        return tf.reshape(X, shape_2)
+
+    @staticmethod
     def _glorot_initializer_conv2d(prev_units, num_units, mapsize, stddev_factor=1.0):
         """Initialization in the style of Glorot 2010.
 
@@ -313,6 +321,28 @@ class Model(object):
 
         return self
 
+    # The implementation of PixelShuffler
+    def add_pixel_shuffler(self, scale=2):
+        inputs = self.get_output()
+        size = tf.shape(inputs)
+        batch_size = size[0]
+        h = size[1]
+        w = size[2]
+        c = inputs.get_shape().as_list()[-1]
+
+        # Get the target channel size
+        channel_target = c // (scale * scale)
+        channel_factor = c // channel_target
+
+        shape_1 = [batch_size, h, w, channel_factor // scale, channel_factor // scale]
+        shape_2 = [batch_size, h * scale, w * scale, 1]
+
+        # Reshape and transpose for periodic shuffling for each channel
+        input_split = tf.split(inputs, channel_target, axis=3)
+        output = tf.concat([self.phase_shift(x, scale, shape_1, shape_2) for x in input_split], axis=3)
+        self.outputs.append(output)
+        return self
+
     def add_sum(self, term):
         """Adds a layer that sums the top layer with the given term"""
 
@@ -413,6 +443,19 @@ def downscale(images, K):
                               strides=[1, K, K, 1],
                               padding='SAME')
     return downscaled
+
+
+def compute_psnr(ref, target):
+    ref = tf.cast(ref, tf.float32)
+    target = tf.cast(target, tf.float32)
+    diff = target - ref
+    sqr = tf.multiply(diff, diff)
+    err = tf.reduce_sum(sqr)
+    v = tf.shape(diff)[0] * tf.shape(diff)[1] * tf.shape(diff)[2] * tf.shape(diff)[3]
+    mse = err / tf.cast(v, tf.float32)
+    psnr = 10. * (tf.log(255. * 255. / mse) / tf.log(10.))
+
+    return psnr
 
 
 def huber_loss(labels, predictions, delta=1.0):

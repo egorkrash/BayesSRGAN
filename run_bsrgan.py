@@ -6,7 +6,7 @@ from arch import BSRGAN
 import time
 import json
 from utils import print_images
-# TODO: support of multiple generator
+# TODO: support of multiple generators
 # TODO loss btw downscaled image and vgg features
 # Configuration (alphabetically)
 
