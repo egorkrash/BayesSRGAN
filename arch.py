@@ -102,9 +102,9 @@ class BSRGAN(object):
             # TODO: why do they use softmax instead of sigmoid?
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
-                # z[:, :, gi % self.num_gen] is sample from p(z)
-                d_logits_, _ = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
-                                                                           gen_params), disc_params)
+                # z[:, :, gi % self.num_gen] is sample from p(I^LR)
+                sample = self.lr[:, :, :, :, gi % self.num_gen]
+                d_logits_, _ = self.discriminator(self.generator(sample, gen_params), disc_params)
                 #constant_labels = np.zeros((self.batch_size, 2))
                 #constant_labels[:, 0] = 1.0  # class label indicating it came from generator, aka fake
                 d_loss_fake_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
@@ -185,16 +185,20 @@ class BSRGAN(object):
         # Spatial upscale (see http://distill.pub/2016/deconv-checkerboard/)
         # and transposed convolution
         # don't apply second upscaling (we need 2x factor)
-        model.add_upscale()
+        #model.add_upscale()
+        model.add_pixel_shuffler(2)
+        print model.outputs[-3:]
         model.add_batch_norm()
         model.add_relu()
-        model.add_conv2d_transpose(256, mapsize=mapsize, stride=1, stddev_factor=1.)
 
+        model.add_conv2d_transpose(256, mapsize=mapsize, stride=1, stddev_factor=1.)
+        #import sys
+        #sys.exit(0)
         # Finalization a la "all convolutional net"
 
         model.add_conv2d(96, mapsize=mapsize, stride=1, stddev_factor=2.)
         # Worse: model.add_batch_norm()
-        # model.add_pixel_shuffler(2)
+
         model.add_relu()
 
         model.add_conv2d(96, mapsize=1, stride=1, stddev_factor=2.)

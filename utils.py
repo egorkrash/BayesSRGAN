@@ -325,14 +325,15 @@ class Model(object):
     def add_pixel_shuffler(self, scale=2):
         inputs = self.get_output()
         size = tf.shape(inputs)
+        print inputs.get_shape()
         batch_size = size[0]
         h = size[1]
         w = size[2]
         c = inputs.get_shape().as_list()[-1]
 
         # Get the target channel size
-        channel_target = c // (scale * scale)
-        channel_factor = c // channel_target
+        channel_target = c / (scale * scale)
+        channel_factor = c / channel_target
 
         shape_1 = [batch_size, h, w, channel_factor // scale, channel_factor // scale]
         shape_2 = [batch_size, h * scale, w * scale, 1]
@@ -340,7 +341,11 @@ class Model(object):
         # Reshape and transpose for periodic shuffling for each channel
         input_split = tf.split(inputs, channel_target, axis=3)
         output = tf.concat([self.phase_shift(x, scale, shape_1, shape_2) for x in input_split], axis=3)
-        self.outputs.append(output)
+        # Reshape using shape from previous output to avoid uncertainty
+        shape = list(self.get_output().get_shape())
+        shape[1] *= 2
+        shape[2] *= 2
+        self.outputs.append(tf.reshape(output, shape))
         return self
 
     def add_sum(self, term):

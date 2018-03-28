@@ -212,7 +212,6 @@ def train():
                 for zi in xrange(num_gen):
                     _imgs, _ps = [], []
                     for _ in range(10):
-                        #z_sampler = np.random.uniform(-1, 1, size=(batch_size, z_dim))
                         sampled_imgs = sess.run(bsrgan.gen_samplers[zi * num_mcmc],
                                                    feed_dict={bsrgan.lr_sampler: sess.run(features)})
                         _imgs.append(sampled_imgs)
