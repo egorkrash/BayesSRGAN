@@ -1,7 +1,6 @@
 from utils import *
 
 FLAGS = tf.app.flags.FLAGS
-# TODO pixelshufflers
 
 
 class BSRGAN(object):
@@ -100,6 +99,7 @@ class BSRGAN(object):
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
                                                                                  labels=tf.ones_like(d_logits)))
             # TODO: why do they use softmax instead of sigmoid?
+            # I'd better use sigmoid
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
                 # z[:, :, gi % self.num_gen] is sample from p(I^LR)
@@ -187,7 +187,7 @@ class BSRGAN(object):
         # don't apply second upscaling (we need 2x factor)
         #model.add_upscale()
         model.add_pixel_shuffler(2)
-        print model.outputs[-3:]
+        model.add_conv2d(256, mapsize=mapsize, padding='VALID')
         model.add_batch_norm()
         model.add_relu()
 

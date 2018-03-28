@@ -7,7 +7,8 @@ import time
 import json
 from utils import print_images
 # TODO: support of multiple generators
-# TODO loss btw downscaled image and vgg features
+# TODO: loss btw downscaled image and vgg features
+# TODO: fix saving samples (random choice replace!=True)
 # Configuration (alphabetically)
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
