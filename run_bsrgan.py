@@ -76,6 +76,8 @@ tf.app.flags.DEFINE_integer('train_iter', 1000, 'number of training iterations')
 tf.app.flags.DEFINE_integer('train_time', 20,
                             "Time in minutes to train the model")
 
+tf.app.flags.DEFINE_float('vgg_scaling', 0.6, 'weight of accepting vgg features')
+
 FLAGS = tf.app.flags.FLAGS
 
 

@@ -17,6 +17,7 @@ class BSRGAN(object):
         self.hr = hr_images
         self.lr = lr_images
         self.hr_dim = list(hr_images.shape[1:])
+        # TODO: fix this crutch below
         self.lr_dim = [32, 32, 3]#list(lr_images.shape[1:])
         self.c_dim = self.hr_dim[2]  # channels
         self.lrate = lrate
@@ -93,20 +94,13 @@ class BSRGAN(object):
             # for each setting of theta_d we count losses using each setting of theta_g
             # build loss for each theta_d
             d_logits, _ = self.discriminator(self.hr, disc_params)
-
-            #constant_labels = np.zeros((self.batch_size, 2))
-            #constant_labels[:, 1] = 1.0  # real
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
                                                                                  labels=tf.ones_like(d_logits)))
-            # TODO: why do they use softmax instead of sigmoid?
-            # I'd better use sigmoid
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
-                # z[:, :, gi % self.num_gen] is sample from p(I^LR)
                 sample = self.lr[:, :, :, :, gi % self.num_gen]
                 d_logits_, _ = self.discriminator(self.generator(sample, gen_params), disc_params)
-                #constant_labels = np.zeros((self.batch_size, 2))
-                #constant_labels[:, 0] = 1.0  # class label indicating it came from generator, aka fake
+
                 d_loss_fake_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                       labels=tf.zeros_like(d_logits_)))
                 d_loss_fakes.append(d_loss_fake_)
@@ -137,14 +131,24 @@ class BSRGAN(object):
 
             gi_losses = []
             for disc_params in self.disc_param_list:
-                d_logits_, d_features_fake = self.discriminator(self.generator(self.lr[:, :, :, :, gi % self.num_gen],
-                                                                                         gen_params), disc_params)
+                gen_sample = self.generator(self.lr[:, :, :, :, gi % self.num_gen], gen_params)
+                d_logits_, d_features_fake = self.discriminator(gen_sample, disc_params)
+
+                # calculate features using perceptual mode vgg22
+                #with tf.name_scope('vgg19_1') as scope:
+                #    extracted_feature_gen = VGG19_slim(gen_sample, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
+                #with tf.name_scope('vgg19_2') as scope:
+                #    extracted_feature_target = VGG19_slim(self.hr, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
+                extracted_feature_gen = gen_sample
+                extracted_feature_target = self.hr
+                diff = extracted_feature_gen - extracted_feature_target
+                content_loss = FLAGS.vgg_scaling * tf.reduce_mean(tf.reduce_sum(tf.square(diff), axis=[3]))
                 _, d_features_real = self.discriminator(self.hr, disc_params)
-                # constant_labels = np.zeros((self.batch_size, 2))
-                # constant_labels[:, 1] = 1.0  # class label indicating that this fake is real
+
                 g_loss_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                  labels=tf.ones_like(d_logits_)))
                 g_loss_ += tf.reduce_mean(huber_loss(d_features_real[-1], d_features_fake[-1]))
+                g_loss_ += content_loss
                 if not self.ml:
                     g_loss_ += self.gen_prior(gen_params) + self.gen_noise(gen_params)
                 gi_losses.append(tf.reshape(g_loss_, [1]))
@@ -186,14 +190,13 @@ class BSRGAN(object):
         # and transposed convolution
         # don't apply second upscaling (we need 2x factor)
         #model.add_upscale()
-        model.add_pixel_shuffler(2)
-        model.add_conv2d(256, mapsize=mapsize, padding='VALID')
+        model.add_pixel_shuffler(2)  # instead of upscaling
+        model.add_conv2d(256, mapsize=mapsize, stride=1, stddev_factor=1.)
         model.add_batch_norm()
         model.add_relu()
 
         model.add_conv2d_transpose(256, mapsize=mapsize, stride=1, stddev_factor=1.)
-        #import sys
-        #sys.exit(0)
+
         # Finalization a la "all convolutional net"
 
         model.add_conv2d(96, mapsize=mapsize, stride=1, stddev_factor=2.)
@@ -203,7 +206,6 @@ class BSRGAN(object):
 
         model.add_conv2d(96, mapsize=1, stride=1, stddev_factor=2.)
         # Worse: model.add_batch_norm()
-        # model.add_pixel_shuffler(2)
         model.add_relu()
 
         # Last layer is sigmoid with no batch normalization

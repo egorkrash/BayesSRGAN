@@ -436,6 +436,20 @@ def vgg_19(inputs, num_classes=1000, is_training=False, dropout_keep_prob=0.5, s
     return net, end_points
 
 
+def VGG19_slim(input, type, reuse, scope):
+    # Define the feature to extract according to the type of perceptual
+    if type == 'VGG54':
+        target_layer = scope + 'vgg_19/conv5/conv5_4'
+    elif type == 'VGG22':
+        target_layer = scope + 'vgg_19/conv2/conv2_2'
+    else:
+        raise NotImplementedError('Unknown perceptual type')
+    _, output = vgg_19(input, is_training=False, reuse=reuse)
+    output = output[target_layer]
+
+    return output
+
+
 def downscale(images, K):
     """Differentiable image downscaling by a factor of K"""
     arr = np.zeros([K, K, 3, 3])
@@ -483,7 +497,7 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
 
     if type(sampled_images) == np.ndarray:
         N, h, w, cdim = sampled_images.shape
-        idxs = np.random.choice(np.arange(N), size=(5, 5), replace=True)
+        idxs = np.random.choice(np.arange(N), size=(5, 5))
     else:
         sampled_imgs, sampled_probs = sampled_images
         sampled_images = sampled_imgs[sampled_probs.argsort()[::-1]]
