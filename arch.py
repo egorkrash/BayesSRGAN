@@ -134,13 +134,23 @@ class BSRGAN(object):
                 gen_sample = self.generator(self.lr[:, :, :, :, gi % self.num_gen], gen_params)
                 d_logits_, d_features_fake = self.discriminator(gen_sample, disc_params)
 
-                # calculate features using perceptual mode vgg22
-                #with tf.name_scope('vgg19_1') as scope:
-                #    extracted_feature_gen = VGG19_slim(gen_sample, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
-                #with tf.name_scope('vgg19_2') as scope:
-                #    extracted_feature_target = VGG19_slim(self.hr, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
-                extracted_feature_gen = gen_sample
-                extracted_feature_target = self.hr
+                # calculate features using perceptual mode vgg22/vgg54
+                if FLAGS.perceptual_mode == 'VGG22':
+                    with tf.name_scope('vgg19_1') as scope:
+                        extracted_feature_gen = VGG19_slim(gen_sample, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
+                    with tf.name_scope('vgg19_2') as scope:
+                        extracted_feature_target = VGG19_slim(self.hr, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
+
+                elif FLAGS.perceptual_mode == 'VGG54':
+                    with tf.name_scope('vgg19_1') as scope:
+                        extracted_feature_gen = VGG19_slim(gen_sample, 'VGG54', reuse=tf.AUTO_REUSE, scope=scope)
+                    with tf.name_scope('vgg19_2') as scope:
+                        extracted_feature_target = VGG19_slim(self.hr, 'VGG54', reuse=tf.AUTO_REUSE, scope=scope)
+
+                else:
+                    extracted_feature_gen = gen_sample
+                    extracted_feature_target = self.hr
+
                 diff = extracted_feature_gen - extracted_feature_target
                 content_loss = FLAGS.vgg_scaling * tf.reduce_mean(tf.reduce_sum(tf.square(diff), axis=[3]))
                 _, d_features_real = self.discriminator(self.hr, disc_params)

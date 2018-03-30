@@ -393,7 +393,7 @@ class Model(object):
             print key, self.params[key].shape
 
 
-def vgg_19(inputs, num_classes=1000, is_training=False, dropout_keep_prob=0.5, spatial_squeeze=True,
+def vgg_19(inputs, is_training=False, dropout_keep_prob=0.5, spatial_squeeze=True,
            scope='vgg_19', reuse=False, fc_conv_padding='VALID'):
     """Oxford Net VGG 19-Layers version E Example.
     Note: All the fully_connected layers have been transformed to conv2d layers.
@@ -421,13 +421,13 @@ def vgg_19(inputs, num_classes=1000, is_training=False, dropout_keep_prob=0.5, s
         with slim.arg_scope([slim.conv2d, slim.fully_connected, slim.max_pool2d], outputs_collections=end_points_collection):
             net = slim.repeat(inputs, 2, slim.conv2d, 64, 3, scope='conv1', reuse=reuse)
             net = slim.max_pool2d(net, [2, 2], scope='pool1')
-            net = slim.repeat(net, 2, slim.conv2d, 128, 3, scope='conv2',reuse=reuse)
+            net = slim.repeat(net, 2, slim.conv2d, 128, 3, scope='conv2', reuse=reuse)
             net = slim.max_pool2d(net, [2, 2], scope='pool2')
             net = slim.repeat(net, 4, slim.conv2d, 256, 3, scope='conv3', reuse=reuse)
             net = slim.max_pool2d(net, [2, 2], scope='pool3')
-            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv4',reuse=reuse)
+            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv4', reuse=reuse)
             net = slim.max_pool2d(net, [2, 2], scope='pool4')
-            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv5',reuse=reuse)
+            net = slim.repeat(net, 4, slim.conv2d, 512, 3, scope='conv5', reuse=reuse)
             net = slim.max_pool2d(net, [2, 2], scope='pool5')
             # Use conv2d instead of fully_connected layers.
             # Convert end_points_collection into a end_point dict.
@@ -439,12 +439,13 @@ def vgg_19(inputs, num_classes=1000, is_training=False, dropout_keep_prob=0.5, s
 def VGG19_slim(input, type, reuse, scope):
     # Define the feature to extract according to the type of perceptual
     if type == 'VGG54':
-        target_layer = scope + 'vgg_19/conv5/conv5_4'
+        target_layer = 'vgg_19/conv5/conv5_4'
     elif type == 'VGG22':
-        target_layer = scope + 'vgg_19/conv2/conv2_2'
+        target_layer = 'vgg_19/conv2/conv2_2'
     else:
         raise NotImplementedError('Unknown perceptual type')
     _, output = vgg_19(input, is_training=False, reuse=reuse)
+    #print output
     output = output[target_layer]
 
     return output

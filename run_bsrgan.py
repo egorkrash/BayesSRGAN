@@ -76,7 +76,11 @@ tf.app.flags.DEFINE_integer('train_iter', 1000, 'number of training iterations')
 tf.app.flags.DEFINE_integer('train_time', 20,
                             "Time in minutes to train the model")
 
-tf.app.flags.DEFINE_float('vgg_scaling', 0.6, 'weight of accepting vgg features')
+tf.app.flags.DEFINE_float('vgg_scaling', 0.0061, 'weight of accepting vgg features')
+
+tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extract features for additive loss')
+
+tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -136,29 +140,25 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     return features, labels
 
 
+def setup_vgg(sess):
+    vgg_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='vgg_19')
+    #print vgg_var_list
+    vgg_restore = tf.train.Saver(vgg_var_list)
+    try:
+        vgg_restore.restore(sess, FLAGS.vgg_ckpt)
+    except:
+        raise LookupError("seems like you don't have vgg weights or checkpoint path (vgg_cktp) is wrong")
+
+
 def main():
-    # tf.reset_default_graph()
-    # sess, summary_writer = setup_tensorflow()
-    # filenames = map(lambda x: os.path.join(FLAGS.dataset, x), os.listdir(FLAGS.dataset))
-    # features, labels = setup_inputs(sess, filenames)
-    #
-    # hr_dim = list(labels.shape[1:])
-    # lr_dim = list(features.shape[1:])
-    #
-    # bsrgan = BSRGAN(hr_dim=hr_dim, lr_dim=lr_dim, dataset_size=len(filenames), J=2,
-    #                 J_d=2, M=1, batch_size=FLAGS.batch_size)
-    # tvars = tf.trainable_variables()
-    # for tv in tvars:
-    #     print tv
-    train()
-
-
-def train():
     tf.reset_default_graph()
     sess, summary_writer = setup_tensorflow()
+    train(sess)
+
+
+def train(sess):
     filenames = map(lambda x: os.path.join(FLAGS.dataset, x), os.listdir(FLAGS.dataset))
     features, labels = setup_inputs(sess, filenames)
-
 
     dataset_size = len(filenames)
     batch_size = FLAGS.batch_size
@@ -169,6 +169,10 @@ def train():
     bsrgan = BSRGAN(hr_images=labels, lr_images=tf.reshape(features, [batch_size, 32, 32, 3, 1]),
                     dataset_size=dataset_size, J=num_gen,
                     J_d=num_disc, M=num_mcmc, batch_size=batch_size)
+
+    print 'Initialization has gone successfully!'
+    setup_vgg(sess)
+    print 'VGG19 restored successfully!'
     sess.run(tf.global_variables_initializer())
     num_train_iter = FLAGS.train_iter
 
@@ -176,7 +180,7 @@ def train():
 
     base_learning_rate = FLAGS.learning_rate_start  # for now we use same learning rate for Ds and Gs
     lr_decay_rate = FLAGS.learning_rate_decay
-
+    print 'Starting training process...'
     for train_iter in range(num_train_iter):
 
         if train_iter == 5000:
