@@ -7,6 +7,8 @@ import time
 import json
 from utils import print_images, load_weights, setup_vgg
 from scipy.misc import imsave
+
+
 # TODO: support of multiple generators
 # TODO: fix saving samples (random choice replace!=True)
 # TODO: !!! fix calling sess.run(features/labels), they MUST be called at the same time !!! IMPORTANT!!!
@@ -227,8 +229,8 @@ def train(sess):
                     print_images(sampled_imgs, "BSRGAN_%i_%.2f" % (zi, g_losses[zi * num_mcmc]),
                                  train_iter, directory=FLAGS.checkpoint_dir)
 
-                imsave(FLAGS.checkpoint_dir + '/lr_%i.png' % train_iter, lr)  # check correspondence
-                imsave(FLAGS.checkpoint_dir + '/hr_%i.png' % train_iter, hr)
+                # imsave(FLAGS.checkpoint_dir + '/lr_%i.png' % train_iter, lr)  # check correspondence
+                # imsave(FLAGS.checkpoint_dir + '/hr_%i.png' % train_iter, hr)
                 # print_images(sess.run(labels), "RAW", train_iter, directory=FLAGS.checkpoint_dir)
 
                 if FLAGS.save_weights:
@@ -241,4 +243,4 @@ def train(sess):
                 print("done")
 
 if __name__ == '__main__':
-    main()
+    tf.app.run()

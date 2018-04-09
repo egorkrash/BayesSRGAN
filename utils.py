@@ -486,7 +486,7 @@ def huber_loss(labels, predictions, delta=1.0):
 
 
 def print_images(sampled_images, label, index, directory, save_all_samples=False):
-    mpl.use('Agg')  # for server side
+    # mpl.use('Agg')  # for server side
 
     def unnormalize(img, cdim):
         img_out = np.zeros_like(img)
@@ -528,6 +528,9 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
 
 def load_weights(sess, start_it=60, checkpoint_period=5, mode=-1):
     # load last saved weights (this function needs simplification. maybe it is possible to load wghts like in setup_vgg)
+    # and better to get all filenames with "weights" prefix, sort them and take the last if it exist
+
+    # TODO: simplification
     it = start_it  # start iteration of loading weights (weights_i, i < 60 won't be loaded)
 
     weights = None
