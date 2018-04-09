@@ -82,7 +82,6 @@ class BSRGAN(object):
         # compile all disciminative weights
         t_vars = tf.trainable_variables()
         self.d_vars = []
-        # TODO get an understanding of m and how params are named in original bayesgan
         for di in xrange(self.num_disc):
             for m in xrange(self.num_mcmc):
                self.d_vars.append([var for var in t_vars if 'd_' in var.name and "_%04d_%04d" % (di, m) in var.name])
@@ -223,7 +222,7 @@ class BSRGAN(object):
         model.add_sigmoid()
 
         gene_vars = model.params
-        #model.summary()
+        #   model.summary()
         if return_params:
             return model.get_output(), gene_vars
         return model.get_output()

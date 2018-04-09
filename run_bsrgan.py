@@ -6,9 +6,10 @@ from arch import BSRGAN
 import time
 import json
 from utils import print_images
+from scipy.misc import imsave
 # TODO: support of multiple generators
-# TODO: loss btw downscaled image and vgg features
 # TODO: fix saving samples (random choice replace!=True)
+# TODO: !!! fix calling sess.run(features/labels), they MUST be called at the same time !!! IMPORTANT!!!
 # Configuration (alphabetically)
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
@@ -82,6 +83,7 @@ tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extra
 
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
+tf.app.flags.DEFINE_bool('continue_training', True, 'continue training process or not')
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -170,6 +172,33 @@ def train(sess):
                     dataset_size=dataset_size, J=num_gen,
                     J_d=num_disc, M=num_mcmc, batch_size=batch_size)
 
+    if FLAGS.continue_training:
+        # load last saved weights
+        iter = 60
+
+        weights = None
+        while True:
+            try:
+                weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % iter)
+                iter += 1
+            except IOError:
+                break
+
+        if weights is None:
+            raise RuntimeError('Can\'t find any weights in checkpoint directory')
+
+        print 'Weights from', iter - 1, 'iteration loaded'
+
+        #for i, j in weights.iteritems():
+        #    print tf.get_variable(i, initializer=j)
+        #for theta in bsrgan.gen_param_list:
+            #for i in theta.values():
+
+
+    #tf.get_variable()
+    #import sys
+    #sys.exit(0)
+
     print 'Initialization has gone successfully!'
     setup_vgg(sess)
     print 'VGG19 restored successfully!'
@@ -219,14 +248,19 @@ def train(sess):
                 for zi in xrange(num_gen):
                     _imgs, _ps = [], []
                     for _ in range(10):
+                        lr, hr = sess.run([features, labels])  # run both to keep correspondence
                         sampled_imgs = sess.run(bsrgan.gen_samplers[zi * num_mcmc],
-                                                   feed_dict={bsrgan.lr_sampler: sess.run(features)})
+                                                feed_dict={bsrgan.lr_sampler: lr})
+
                         _imgs.append(sampled_imgs)
                     sampled_imgs = np.concatenate(_imgs)
-                    print_images(sampled_imgs, "B_DCGAN_%i_%.2f" % (zi, g_losses[zi * num_mcmc]),
+
+                    print_images(sampled_imgs, "BSRGAN_%i_%.2f" % (zi, g_losses[zi * num_mcmc]),
                                  train_iter, directory=FLAGS.checkpoint_dir)
 
-                print_images(sess.run(labels), "RAW", train_iter, directory=FLAGS.checkpoint_dir)
+                imsave(FLAGS.checkpoint_dir + '/lr_%i.png' % train_iter, lr)  # check correspondence
+                imsave(FLAGS.checkpoint_dir + '/hr_%i.png' % train_iter, hr)
+                # print_images(sess.run(labels), "RAW", train_iter, directory=FLAGS.checkpoint_dir)
 
                 if FLAGS.save_weights:
                     var_dict = {}
