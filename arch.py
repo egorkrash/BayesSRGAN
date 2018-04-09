@@ -36,6 +36,7 @@ class BSRGAN(object):
 
         self.noise_std = np.sqrt(2 * self.alpha * self.eta)
         self.build_bgan_graph()
+        print 'Model initialization has gone successfully!'
 
     def initialize_wgts(self, scope_str):
         # define p(theta_x)

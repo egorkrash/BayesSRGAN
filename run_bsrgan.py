@@ -5,7 +5,7 @@ import tensorflow as tf
 from arch import BSRGAN
 import time
 import json
-from utils import print_images
+from utils import print_images, load_weights, setup_vgg
 from scipy.misc import imsave
 # TODO: support of multiple generators
 # TODO: fix saving samples (random choice replace!=True)
@@ -142,16 +142,6 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     return features, labels
 
 
-def setup_vgg(sess):
-    vgg_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='vgg_19')
-    #print vgg_var_list
-    vgg_restore = tf.train.Saver(vgg_var_list)
-    try:
-        vgg_restore.restore(sess, FLAGS.vgg_ckpt)
-    except:
-        raise LookupError("seems like you don't have vgg weights or checkpoint path (vgg_cktp) is wrong")
-
-
 def main():
     tf.reset_default_graph()
     sess, summary_writer = setup_tensorflow()
@@ -164,45 +154,24 @@ def train(sess):
 
     dataset_size = len(filenames)
     batch_size = FLAGS.batch_size
+    start_iter = 0  # in case we don't load any weights
+
     num_gen = FLAGS.num_gen
     num_disc = FLAGS.num_disc
     num_mcmc = FLAGS.num_mcmc
 
+    # ==================================================================================================================
     bsrgan = BSRGAN(hr_images=labels, lr_images=tf.reshape(features, [batch_size, 32, 32, 3, 1]),
                     dataset_size=dataset_size, J=num_gen,
                     J_d=num_disc, M=num_mcmc, batch_size=batch_size)
 
-    if FLAGS.continue_training:
-        # load last saved weights
-        iter = 60
-
-        weights = None
-        while True:
-            try:
-                weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % iter)
-                iter += 1
-            except IOError:
-                break
-
-        if weights is None:
-            raise RuntimeError('Can\'t find any weights in checkpoint directory')
-
-        print 'Weights from', iter - 1, 'iteration loaded'
-
-        #for i, j in weights.iteritems():
-        #    print tf.get_variable(i, initializer=j)
-        #for theta in bsrgan.gen_param_list:
-            #for i in theta.values():
-
-
-    #tf.get_variable()
-    #import sys
-    #sys.exit(0)
-
-    print 'Initialization has gone successfully!'
     setup_vgg(sess)
-    print 'VGG19 restored successfully!'
     sess.run(tf.global_variables_initializer())
+
+    if FLAGS.continue_training:
+        start_iter = load_weights(sess)
+    # ==================================================================================================================
+
     num_train_iter = FLAGS.train_iter
 
     optimizer_dict = {"disc": bsrgan.d_optims_adam, "gen":  bsrgan.g_optims_adam}
@@ -210,7 +179,7 @@ def train(sess):
     base_learning_rate = FLAGS.learning_rate_start  # for now we use same learning rate for Ds and Gs
     lr_decay_rate = FLAGS.learning_rate_decay
     print 'Starting training process...'
-    for train_iter in range(num_train_iter):
+    for train_iter in range(start_iter, start_iter+num_train_iter):
 
         if train_iter == 5000:
             print("Switching to user-specified optimizer")

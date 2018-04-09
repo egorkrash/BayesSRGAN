@@ -445,7 +445,6 @@ def VGG19_slim(input, type, reuse, scope):
     else:
         raise NotImplementedError('Unknown perceptual type')
     _, output = vgg_19(input, is_training=False, reuse=reuse)
-    #print output
     output = output[target_layer]
 
     return output
@@ -525,3 +524,47 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
     if "raw" not in label.lower() and save_all_samples:
         np.savez_compressed(os.path.join(directory, "samples_%s_%i.npz" % (label, index)),
                             samples=sampled_images)
+
+
+def load_weights(sess, start_it=60, checkpoint_period=5, mode=-1):
+    # load last saved weights (this function needs simplification. maybe it is possible to load wghts like in setup_vgg)
+    it = start_it  # start iteration of loading weights (weights_i, i < 60 won't be loaded)
+
+    weights = None
+    if mode == -1:
+        while True:
+            try:
+                weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % it)
+                it += checkpoint_period
+
+            except IOError:
+                break
+    else:
+        try:
+            weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % mode)
+            it += checkpoint_period
+
+        except IOError:
+            pass
+
+    if weights is None:
+        raise RuntimeError('Can\'t find any weights in checkpoint directory')
+
+    print 'Weights from', it - checkpoint_period, 'iteration loaded!'
+    # assign loaded to existing
+    for var_name, var_arr in weights.iteritems():
+        # is there a way to simplify this?
+        sess.run(tf.assign(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, var_name)[0], var_arr))
+
+    print 'Model weights restored successfully!'
+    return it - checkpoint_period + 1
+
+
+def setup_vgg(sess):
+    vgg_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='vgg_19')
+    vgg_restore = tf.train.Saver(vgg_var_list)
+    try:
+        vgg_restore.restore(sess, FLAGS.vgg_ckpt)
+    except:
+        raise LookupError("seems like you don't have vgg weights or checkpoint path (vgg_cktp) is wrong")
+    print 'VGG19 restored successfully!'
