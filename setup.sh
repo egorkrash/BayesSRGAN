@@ -21,9 +21,9 @@ wget http://download.tensorflow.org/models/vgg_19_2016_08_28.tar.gz
 sudo tar xvf ./vgg_19_2016_08_28.tar.gz
 
 
-# download BSRGAN weights for default setting
-
-
-
 # make checkpoint directory for training
-mkdir checkpoint
+mkdir checkpoint/
+
+# download BSRGAN weights for default setting
+cd checkpoint/
+wget https://www.dropbox.com/s/m2ub5kqhpa8hl2l/weights_6000.npz
