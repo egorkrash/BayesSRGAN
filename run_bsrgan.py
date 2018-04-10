@@ -9,10 +9,12 @@ from utils import print_images, load_weights, setup_vgg
 from scipy.misc import imsave
 
 
-# TODO: support of multiple generators
+# TODO: support of multiple generators!!! IMPORTANT !!!
 # TODO: fix saving samples (random choice replace!=True)
-# TODO: !!! fix calling sess.run(features/labels), they MUST be called at the same time !!! IMPORTANT!!!
+# TODO: fix calling sess.run(features/labels), they MUST be called at the same time(seems like I fixed it, but not sure)
 # TODO: add demo
+# TODO: add evolution plots
+# TODO: configure summary writer
 
 # Configuration (alphabetically)
 
@@ -221,6 +223,7 @@ def train(sess):
                 for zi in xrange(num_gen):
                     _imgs, _ps = [], []
                     for _ in range(10):
+                        lr_samples = []
                         lr, hr = sess.run([features, labels])  # run both to keep correspondence
                         sampled_imgs = sess.run(bsrgan.gen_samplers[zi * num_mcmc],
                                                 feed_dict={bsrgan.lr_sampler: lr})

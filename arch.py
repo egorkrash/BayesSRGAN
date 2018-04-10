@@ -18,7 +18,7 @@ class BSRGAN(object):
         self.lr = lr_images
         self.hr_dim = list(hr_images.shape[1:])
         # TODO: fix this crutch below
-        self.lr_dim = [32, 32, 3]#list(lr_images.shape[1:])
+        self.lr_dim = [32, 32, 3]#list(lr_images.shape)  #
         self.c_dim = self.hr_dim[2]  # channels
         self.lrate = lrate
 
