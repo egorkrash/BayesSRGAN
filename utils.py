@@ -24,8 +24,6 @@ class Model(object):
             self.params.update(params)
             self.init = False
 
-        #print self.params
-
     def _get_layer_str(self, layer=None):
         """function for setting layers names"""
         if layer is None:
@@ -152,7 +150,6 @@ class Model(object):
         reduction_indices = list(range(1, len(this_input.get_shape())))
         acc = tf.reduce_sum(this_input, reduction_indices=reduction_indices, keep_dims=True)
         out = this_input / (acc + FLAGS.epsilon)
-        # out = tf.verify_tensor_all_finite(out, "add_softmax failed; is sum equal to zero?")
 
         self.outputs.append(out)
         return self
@@ -181,8 +178,7 @@ class Model(object):
         with tf.variable_scope(self._get_layer_str() + self.mask, reuse=tf.AUTO_REUSE):
             t1 = .5 * (1 + leak)
             t2 = .5 * (1 - leak)
-            out = t1 * self.get_output() + \
-                  t2 * tf.abs(self.get_output())
+            out = t1 * self.get_output() + t2 * tf.abs(self.get_output())
 
         self.outputs.append(out)
         return self
@@ -201,7 +197,7 @@ class Model(object):
                 # Weight term and convolution
                 initw = self._glorot_initializer_conv2d(prev_units, num_units, mapsize, stddev_factor=stddev_factor)
                 weight = tf.get_variable('weight', initializer=initw)
-                out = tf.nn.conv2d(self.get_output(), weight, strides=[1, stride, stride, 1], padding=padding)
+                # out = tf.nn.conv2d(self.get_output(), weight, strides=[1, stride, stride, 1], padding=padding)
                 # Bias term
                 initb = tf.constant(0.0, shape=[num_units])
                 bias = tf.get_variable('bias', initializer=initb)
@@ -237,10 +233,10 @@ class Model(object):
                 weight = tf.get_variable('weight', initializer=initw)
                 weight = tf.transpose(weight, perm=[0, 1, 3, 2])
 
-                out = tf.nn.conv2d_transpose(self.get_output(), weight,
-                                             output_shape=output_shape,
-                                             strides=[1, stride, stride, 1],
-                                             padding='SAME')
+                # out = tf.nn.conv2d_transpose(self.get_output(), weight,
+                #                             output_shape=output_shape,
+                #                             strides=[1, stride, stride, 1],
+                #                             padding='SAME')
 
                 # Bias term
                 initb = tf.constant(0.0, shape=[num_units])
@@ -249,10 +245,11 @@ class Model(object):
                 self._write_params(weight, bias, layer_name)
         else:
             weight, bias = self._get_params(layer_name)
-            out = tf.nn.conv2d_transpose(self.get_output(), weight,
-                                             output_shape=output_shape,
-                                             strides=[1, stride, stride, 1],
-                                             padding='SAME')
+
+        out = tf.nn.conv2d_transpose(self.get_output(), weight,
+                                     output_shape=output_shape,
+                                     strides=[1, stride, stride, 1],
+                                     padding='SAME')
 
         out = tf.nn.bias_add(out, bias)
         self.outputs.append(out)
@@ -526,41 +523,29 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
                             samples=sampled_images)
 
 
-def load_weights(sess, start_it=60, checkpoint_period=5, mode=-1):
+def load_weights(sess, mode=-1):
     # load last saved weights (this function needs simplification. maybe it is possible to load wghts like in setup_vgg)
-    # and better to get all filenames with "weights" prefix, sort them and take the last if it exist
 
-    # TODO: simplification
-    it = start_it  # start iteration of loading weights (weights_i, i < 60 won't be loaded)
-
-    weights = None
-    if mode == -1:
-        while True:
-            try:
-                weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % it)
-                it += checkpoint_period
-
-            except IOError:
-                break
-    else:
-        try:
-            weights = np.load(FLAGS.checkpoint_dir + '/weights_%i.npz' % mode)
-            it += checkpoint_period
-
-        except IOError:
-            pass
-
-    if weights is None:
+    wpaths = sorted(filter(lambda x: x.startswith('weights'), os.listdir(FLAGS.checkpoint_dir)))
+    if len(wpaths) == 0:
         raise RuntimeError('Can\'t find any weights in checkpoint directory')
 
-    print 'Weights from', it - checkpoint_period, 'iteration loaded!'
+    if mode == -1:
+        path = wpaths[-1]  # take the last
+    else:
+        path = 'weights_%i.npz' % mode
+
+    weights = np.load(FLAGS.checkpoint_dir + '/' + path)
+    start_it = int(path[path.rfind('_') + 1: path.rfind('.')])
+
+    print 'Weights from %i' % start_it, 'iteration loaded!'
     # assign loaded to existing
     for var_name, var_arr in weights.iteritems():
         # is there a way to simplify this?
         sess.run(tf.assign(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, var_name)[0], var_arr))
 
     print 'Model weights restored successfully!'
-    return it - checkpoint_period + 1
+    return start_it + 1
 
 
 def setup_vgg(sess):

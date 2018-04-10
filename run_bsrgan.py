@@ -12,6 +12,8 @@ from scipy.misc import imsave
 # TODO: support of multiple generators
 # TODO: fix saving samples (random choice replace!=True)
 # TODO: !!! fix calling sess.run(features/labels), they MUST be called at the same time !!! IMPORTANT!!!
+# TODO: add demo
+
 # Configuration (alphabetically)
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
@@ -20,7 +22,7 @@ tf.app.flags.DEFINE_integer('batch_size', 16,
 tf.app.flags.DEFINE_string('checkpoint_dir', 'checkpoint',
                            "Output folder where checkpoints are dumped.")
 
-tf.app.flags.DEFINE_integer('checkpoint_period', 5,
+tf.app.flags.DEFINE_integer('checkpoint_period', 100,
                             "Number of batches in between checkpoints")
 
 tf.app.flags.DEFINE_string('dataset', 'dataset',
@@ -74,12 +76,12 @@ tf.app.flags.DEFINE_integer('test_vectors', 16,
 tf.app.flags.DEFINE_string('train_dir', 'train',
                            "Output folder where training logs are dumped.")
 
-tf.app.flags.DEFINE_integer('train_iter', 1000, 'number of training iterations')
+tf.app.flags.DEFINE_integer('train_iter', 2000, 'number of training iterations')
 
 tf.app.flags.DEFINE_integer('train_time', 20,
                             "Time in minutes to train the model")
 
-tf.app.flags.DEFINE_float('vgg_scaling', 0.0061, 'weight of accepting vgg features')
+tf.app.flags.DEFINE_float('vgg_scaling', 0.061, 'weight of accepting vgg features')
 
 tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extract features for additive loss')
 
@@ -243,4 +245,5 @@ def train(sess):
                 print("done")
 
 if __name__ == '__main__':
-    tf.app.run()
+    #tf.app.run()
+    main()
