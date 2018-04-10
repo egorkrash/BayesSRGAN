@@ -146,7 +146,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     return features, labels
 
 
-def main():
+def main(argv=None):
     tf.reset_default_graph()
     sess, summary_writer = setup_tensorflow()
     train(sess)
@@ -245,5 +245,4 @@ def train(sess):
                 print("done")
 
 if __name__ == '__main__':
-    #tf.app.run()
-    main()
+    tf.app.run()
