@@ -19,7 +19,7 @@ mkdir vgg19/
 cd vgg19/
 wget http://download.tensorflow.org/models/vgg_19_2016_08_28.tar.gz
 sudo tar xvf ./vgg_19_2016_08_28.tar.gz
-
+cd ..
 
 # make checkpoint directory for training
 mkdir checkpoint/
