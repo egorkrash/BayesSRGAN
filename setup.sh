@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # setup requirements
-# I don't know why but upgrade is needed before installing reqs
-    sudo pip install --upgrade tensorflow-gpu
+# I don't know why but upgrade is needed before installing reqs (it doesn't work on my VM otherwise)
+sudo pip install --upgrade tensorflow-gpu
 sudo pip install -r requirements.txt
 
 # download data
