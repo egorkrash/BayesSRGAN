@@ -6,15 +6,14 @@ from arch import BSRGAN
 import time
 import json
 from utils import print_images, load_weights, setup_vgg
-from scipy.misc import imsave
+# from scipy.misc import imsave
 
-
-# TODO: support of multiple generators!!! IMPORTANT !!!
-# TODO: fix saving samples (random choice replace!=True)
-# TODO: fix calling sess.run(features/labels), they MUST be called at the same time(seems like I fixed it, but not sure)
+# TODO: fix saving images
 # TODO: add demo
 # TODO: add evolution plots
 # TODO: configure summary writer
+# Questions:
+# how to sample at the end (assume I have x generators and x discriminators trained)? Should I just take the best gen?
 
 # Configuration (alphabetically)
 
@@ -55,7 +54,7 @@ tf.app.flags.DEFINE_bool('log_device_placement', False,
 
 tf.app.flags.DEFINE_integer('num_gen', 1, 'number of generators')
 
-tf.app.flags.DEFINE_integer('num_disc', 1, 'number of discriminators')
+tf.app.flags.DEFINE_integer('num_disc', 2, 'number of discriminators')
 
 tf.app.flags.DEFINE_integer('num_mcmc', 1, 'number of mcmc')
 
@@ -89,13 +88,14 @@ tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extra
 
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
-tf.app.flags.DEFINE_bool('continue_training', True, 'continue training process or not')
+tf.app.flags.DEFINE_bool('continue_training', False, 'continue training process or not')
 FLAGS = tf.app.flags.FLAGS
 
 
 def setup_tensorflow():
     # Create session
     config = tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)
+    config.gpu_options.allow_growth = True
     sess = tf.Session(config=config)
 
     # Initialize rng with a deterministic seed
@@ -138,7 +138,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
 
     # Using asynchronous queues
     features, labels = tf.train.batch([feature, label],
-                                      batch_size=FLAGS.batch_size,
+                                      batch_size=FLAGS.batch_size * FLAGS.num_gen,
                                       num_threads=4,
                                       capacity=capacity_factor * FLAGS.batch_size,
                                       name='labels_and_features')
@@ -166,8 +166,13 @@ def train(sess):
     num_disc = FLAGS.num_disc
     num_mcmc = FLAGS.num_mcmc
 
+    features = tf.reshape(features, [FLAGS.batch_size, num_gen, 32, 32, 3])
+    labels = tf.reshape(labels, [FLAGS.batch_size, num_gen, 64, 64, 3])
+    features = tf.transpose(features, [0, 2, 3, 4, 1])
+    labels = tf.transpose(labels, [0, 2, 3, 4, 1])
+
     # ==================================================================================================================
-    bsrgan = BSRGAN(hr_images=labels, lr_images=tf.reshape(features, [batch_size, 32, 32, 3, 1]),
+    bsrgan = BSRGAN(hr_images=labels, lr_images=features,
                     dataset_size=dataset_size, J=num_gen,
                     J_d=num_disc, M=num_mcmc, batch_size=batch_size)
 
@@ -184,7 +189,7 @@ def train(sess):
 
     base_learning_rate = FLAGS.learning_rate_start  # for now we use same learning rate for Ds and Gs
     lr_decay_rate = FLAGS.learning_rate_decay
-    print 'Starting training process...'
+    print 'Starting training process, it is time to relax and drink some tea ;)'
     for train_iter in range(start_iter, start_iter+num_train_iter):
 
         if train_iter == 5000:
@@ -222,11 +227,11 @@ def train(sess):
             if FLAGS.save_samples:
                 for zi in xrange(num_gen):
                     _imgs, _ps = [], []
+
                     for _ in range(10):
-                        lr_samples = []
                         lr, hr = sess.run([features, labels])  # run both to keep correspondence
                         sampled_imgs = sess.run(bsrgan.gen_samplers[zi * num_mcmc],
-                                                feed_dict={bsrgan.lr_sampler: lr})
+                                                feed_dict={bsrgan.lr_sampler: lr[:, :, :, :, 0]})
 
                         _imgs.append(sampled_imgs)
                     sampled_imgs = np.concatenate(_imgs)
@@ -246,6 +251,8 @@ def train(sess):
                     np.savez_compressed(os.path.join(FLAGS.checkpoint_dir, "weights_%i.npz" % train_iter), **var_dict)
 
                 print("done")
+
+    print 'Finished training!'
 
 if __name__ == '__main__':
     tf.app.run()

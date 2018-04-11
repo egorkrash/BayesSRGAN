@@ -16,11 +16,10 @@ class BSRGAN(object):
 
         self.hr = hr_images
         self.lr = lr_images
-        self.hr_dim = list(hr_images.shape[1:])
-        # TODO: fix this crutch below
-        self.lr_dim = [32, 32, 3]#list(lr_images.shape)  #
+        self.hr_dim = list(hr_images.shape[1: -1])  # exclude batch_size and num gen
+        self.lr_dim = list(lr_images.shape[1: -1])
         self.c_dim = self.hr_dim[2]  # channels
-        self.lrate = lrate
+        self.lrate = lrate  # learning rate
 
         # Bayes
         self.prior_std = prior_std
@@ -46,7 +45,7 @@ class BSRGAN(object):
                 for m in range(self.num_mcmc):
                     # get ordered dict representing params of current generator
                     # initialization mode (params == None)
-                    wgts_ = self.generator(tf.constant(0.0, dtype=tf.float32, shape=self.lr_sampler.shape),
+                    wgts_ = self.generator(tf.constant(0.0, dtype=tf.float32, shape=[FLAGS.batch_size]+self.lr_dim),
                                            params=None, return_params=True, mask='_%04d_%04d' % (gi, m))[-1]
 
                     #new_keys = map(lambda x: x + '_%04d_%04d' % (gi, m), wgts_.keys())
@@ -56,7 +55,7 @@ class BSRGAN(object):
         elif scope_str == "discriminator":
             for di in range(self.num_disc):
                 for m in range(self.num_mcmc):
-                    wgts_ = self.discriminator(tf.constant(0.0, dtype=tf.float32, shape=self.hr.shape),
+                    wgts_ = self.discriminator(tf.constant(0.0, dtype=tf.float32, shape=[FLAGS.batch_size]+self.hr_dim),
                                                params=None, return_params=True, mask='_%04d_%04d' % (di, m))[-1]
 
                     #new_keys = map(lambda x: x + '_%04d_%04d' % (di, m), wgts_.keys())
@@ -68,13 +67,13 @@ class BSRGAN(object):
         return param_list
 
     def build_bgan_graph(self):
-        #self.hr = tf.placeholder(tf.float32, [self.batch_size] + self.hr_dim, name='real_images')
+        # self.hr = tf.placeholder(tf.float32, [self.batch_size] + self.hr_dim, name='real_images')
         # define placeholder for LR images
-        #self.lr = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim + [self.num_gen], name='lr_images')
+        # self.lr = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim + [self.num_gen], name='lr_images')
         self.lr_sampler = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim, name='lr_sampler')
 
         # initialize generator weights
-        self.gen_param_list = self.initialize_wgts("generator")  # p(theta_g)
+        self.gen_param_list = self.initialize_wgts("generator")  # approximation of p(theta_g)
         self.disc_param_list = self.initialize_wgts("discriminator")  # p(theta_d)
         # build discrimitive losses and optimizers
         # prep optimizer args
@@ -89,17 +88,17 @@ class BSRGAN(object):
 
         # build disc losses and optimizers
         self.d_losses, self.d_optims, self.d_optims_adam = [], [], []
-
         for di, disc_params in enumerate(self.disc_param_list):
             # for each setting of theta_d we count losses using each setting of theta_g
             # build loss for each theta_d
-            d_logits, _ = self.discriminator(self.hr, disc_params)
+            hr_sample = self.hr[:, :, :, :, di % self.num_gen]  # should we sample from p(hr) here to count real loss?
+            d_logits, _ = self.discriminator(hr_sample, disc_params)
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
                                                                                  labels=tf.ones_like(d_logits)))
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
-                sample = self.lr[:, :, :, :, gi % self.num_gen]
-                d_logits_, _ = self.discriminator(self.generator(sample, gen_params), disc_params)
+                lr_sample = self.lr[:, :, :, :, gi % self.num_gen]
+                d_logits_, _ = self.discriminator(self.generator(lr_sample, gen_params), disc_params)
 
                 d_loss_fake_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                       labels=tf.zeros_like(d_logits_)))
@@ -112,7 +111,7 @@ class BSRGAN(object):
                     d_loss_ += self.disc_prior(disc_params) + self.disc_noise(disc_params)
                 d_losses.append(tf.reshape(d_loss_, [1]))
 
-            d_loss = tf.reduce_logsumexp(tf.concat(d_losses, 0))
+            d_loss = tf.reduce_logsumexp(tf.concat(d_losses, axis=0))
             self.d_losses.append(d_loss)
             d_opt = self._get_optimizer(self.d_learning_rate)
             self.d_optims.append(d_opt.minimize(d_loss, var_list=self.d_vars[di]))
@@ -130,8 +129,11 @@ class BSRGAN(object):
         for gi, gen_params in enumerate(self.gen_param_list):
 
             gi_losses = []
-            for disc_params in self.disc_param_list:
-                gen_sample = self.generator(self.lr[:, :, :, :, gi % self.num_gen], gen_params)
+            for di, disc_params in enumerate(self.disc_param_list):
+                hr_sample = self.hr[:, :, :, :, di % self.num_gen]  # and here?
+                # for correspondence obviously num_gen == num_disc, but that is strange
+                lr_sample = self.lr[:, :, :, :, gi % self.num_gen]
+                gen_sample = self.generator(lr_sample, gen_params)
                 d_logits_, d_features_fake = self.discriminator(gen_sample, disc_params)
 
                 # calculate features using perceptual mode vgg22/vgg54
@@ -139,25 +141,26 @@ class BSRGAN(object):
                     with tf.name_scope('vgg19_1') as scope:
                         extracted_feature_gen = VGG19_slim(gen_sample, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
                     with tf.name_scope('vgg19_2') as scope:
-                        extracted_feature_target = VGG19_slim(self.hr, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
+                        extracted_feature_target = VGG19_slim(hr_sample, 'VGG22', reuse=tf.AUTO_REUSE, scope=scope)
 
                 elif FLAGS.perceptual_mode == 'VGG54':
                     with tf.name_scope('vgg19_1') as scope:
                         extracted_feature_gen = VGG19_slim(gen_sample, 'VGG54', reuse=tf.AUTO_REUSE, scope=scope)
                     with tf.name_scope('vgg19_2') as scope:
-                        extracted_feature_target = VGG19_slim(self.hr, 'VGG54', reuse=tf.AUTO_REUSE, scope=scope)
+                        extracted_feature_target = VGG19_slim(hr_sample, 'VGG54', reuse=tf.AUTO_REUSE, scope=scope)
 
                 else:
                     extracted_feature_gen = gen_sample
-                    extracted_feature_target = self.hr
+                    extracted_feature_target = hr_sample
 
                 diff = extracted_feature_gen - extracted_feature_target
                 content_loss = FLAGS.vgg_scaling * tf.reduce_mean(tf.reduce_sum(tf.square(diff), axis=[3]))
-                _, d_features_real = self.discriminator(self.hr, disc_params)
+
+                #_, d_features_real = self.discriminator(self.hr, disc_params)  # hr_sample
 
                 g_loss_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                  labels=tf.ones_like(d_logits_)))
-                g_loss_ += tf.reduce_mean(huber_loss(d_features_real[-1], d_features_fake[-1]))
+                #g_loss_ += tf.reduce_mean(huber_loss(d_features_real[-1], d_features_fake[-1]))
                 g_loss_ += content_loss
                 if not self.ml:
                     g_loss_ += self.gen_prior(gen_params) + self.gen_noise(gen_params)
@@ -190,8 +193,7 @@ class BSRGAN(object):
         mapsize = 3
 
         # See Arxiv 1603.05027
-        scope = 'g'
-        model = Model(scope, features, params, mask)
+        model = Model('g', features, params, mask)
 
         for j in range(2):
             model.add_residual_block(256, mapsize=mapsize)

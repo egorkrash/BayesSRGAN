@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 
 # setup requirements
-
+# I don't know why but upgrade is needed before installing reqs
+    sudo pip install --upgrade tensorflow-gpu
 sudo pip install -r requirements.txt
 
 # download data
 # comment following three lines if you want to use your data set
 
 wget https://www.dropbox.com/s/oif0774okcm7x7z/dataset.zip
-unzip dataset.zip
+unzip -qq dataset.zip
 rm -rf dataset.zip
 
 
@@ -27,4 +28,4 @@ mkdir checkpoint/
 
 # download BSRGAN weights for default setting
 cd checkpoint/
-wget https://www.dropbox.com/s/m2ub5kqhpa8hl2l/weights_6000.npz
+wget https://www.dropbox.com/s/rqb9px5abjvueu6/weights_10000.npz
