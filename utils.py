@@ -3,7 +3,6 @@ import numpy as np
 import tensorflow as tf
 from collections import OrderedDict
 import tensorflow.contrib.slim as slim
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import os
 FLAGS = tf.app.flags.FLAGS

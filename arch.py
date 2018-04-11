@@ -91,7 +91,7 @@ class BSRGAN(object):
         for di, disc_params in enumerate(self.disc_param_list):
             # for each setting of theta_d we count losses using each setting of theta_g
             # build loss for each theta_d
-            hr_sample = self.hr[:, :, :, :, di % self.num_gen]  # should we sample from p(hr) here to count real loss?
+            hr_sample = self.hr[:, :, :, :, 0]#di % self.num_gen]  # should we sample from p(hr) here to count real loss?
             d_logits, _ = self.discriminator(hr_sample, disc_params)
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
                                                                                  labels=tf.ones_like(d_logits)))
@@ -127,12 +127,11 @@ class BSRGAN(object):
 
         self.g_losses, self.g_optims, self.g_optims_adam = [], [], []
         for gi, gen_params in enumerate(self.gen_param_list):
-
+            hr_sample = self.hr[:, :, :, :, gi % self.num_gen]
+            lr_sample = self.lr[:, :, :, :, gi % self.num_gen]
             gi_losses = []
             for di, disc_params in enumerate(self.disc_param_list):
-                hr_sample = self.hr[:, :, :, :, di % self.num_gen]  # and here?
-                # for correspondence obviously num_gen == num_disc, but that is strange
-                lr_sample = self.lr[:, :, :, :, gi % self.num_gen]
+
                 gen_sample = self.generator(lr_sample, gen_params)
                 d_logits_, d_features_fake = self.discriminator(gen_sample, disc_params)
 

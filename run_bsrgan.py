@@ -12,6 +12,7 @@ from utils import print_images, load_weights, setup_vgg
 # TODO: add demo
 # TODO: add evolution plots
 # TODO: configure summary writer
+# TODO: fix num mcmc
 # Questions:
 # how to sample at the end (assume I have x generators and x discriminators trained)? Should I just take the best gen?
 
@@ -52,7 +53,7 @@ tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
 tf.app.flags.DEFINE_bool('log_device_placement', False,
                          "Log the device where variables are placed.")
 
-tf.app.flags.DEFINE_integer('num_gen', 1, 'number of generators')
+tf.app.flags.DEFINE_integer('num_gen', 2, 'number of generators')
 
 tf.app.flags.DEFINE_integer('num_disc', 2, 'number of discriminators')
 
