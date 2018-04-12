@@ -221,6 +221,7 @@ class BSRGAN(object):
 
         # Last layer is sigmoid with no batch normalization
         model.add_conv2d(3, mapsize=1, stride=1, stddev_factor=1.)
+        # TODO: add tanh following https://github.com/soumith/ganhacks
         model.add_sigmoid()
 
         gene_vars = model.params
@@ -256,6 +257,7 @@ class BSRGAN(object):
         # Linearly map to real/fake and return average score
         # (softmax will be applied later)
         model.add_conv2d(1, mapsize=1, stride=1, stddev_factor=stddev_factor)
+        model.add_relu()
         model.add_flatten()
         model.add_dense(100, stddev_factor=2)
         model.add_relu()

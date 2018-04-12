@@ -30,6 +30,8 @@ tf.app.flags.DEFINE_integer('checkpoint_period', 100,
 tf.app.flags.DEFINE_string('dataset', 'dataset',
                            "Path to the dataset directory.")
 
+tf.app.flags.DEFINE_integer('mode', -1, 'start of training continuation')
+
 tf.app.flags.DEFINE_float('epsilon', 1e-8,
                           "Fuzz term to avoid numerical instability")
 
@@ -45,7 +47,7 @@ tf.app.flags.DEFINE_float('learning_beta1', 0.5,
 tf.app.flags.DEFINE_float('learning_rate_start', 0.00020,
                           "Starting learning rate used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_decay', 3.0, 'lr decay')
+tf.app.flags.DEFINE_float('learning_rate_decay', 1.0, 'lr decay')
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
                             "Number of batches until learning rate is halved")
@@ -83,13 +85,13 @@ tf.app.flags.DEFINE_integer('train_iter', 2000, 'number of training iterations')
 tf.app.flags.DEFINE_integer('train_time', 20,
                             "Time in minutes to train the model")
 
-tf.app.flags.DEFINE_float('vgg_scaling', 0.061, 'weight of accepting vgg features')
+tf.app.flags.DEFINE_float('vgg_scaling', 0.0061, 'weight of accepting vgg features')
 
 tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extract features for additive loss')
 
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
-tf.app.flags.DEFINE_bool('continue_training', False, 'continue training process or not')
+tf.app.flags.DEFINE_bool('continue_training', True, 'continue training process or not')
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -181,7 +183,7 @@ def train(sess):
     sess.run(tf.global_variables_initializer())
 
     if FLAGS.continue_training:
-        start_iter = load_weights(sess)
+        start_iter = load_weights(sess, mode=FLAGS.mode)
     # ==================================================================================================================
 
     num_train_iter = FLAGS.train_iter
@@ -198,8 +200,8 @@ def train(sess):
             optimizer_dict = {"disc": bsrgan.d_optims_adam,
                               "gen": bsrgan.g_optims_adam}
 
-        learning_rate = base_learning_rate * np.exp(-lr_decay_rate *
-                                                    min(1.0, (train_iter * batch_size) / float(dataset_size)))
+        learning_rate = base_learning_rate #* np.exp(-lr_decay_rate *
+                                           #         min(1.0, (train_iter * batch_size) / float(dataset_size)))
 
         # compute disc losses
         disc_info = sess.run(optimizer_dict["disc"] + bsrgan.d_losses, feed_dict={bsrgan.d_learning_rate: learning_rate})
