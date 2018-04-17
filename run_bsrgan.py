@@ -200,8 +200,8 @@ def train(sess):
             optimizer_dict = {"disc": bsrgan.d_optims_adam,
                               "gen": bsrgan.g_optims_adam}
 
-        learning_rate = base_learning_rate #* np.exp(-lr_decay_rate *
-                                           #         min(1.0, (train_iter * batch_size) / float(dataset_size)))
+        learning_rate = base_learning_rate * np.exp(-lr_decay_rate *
+                                                    min(1.0, (train_iter * batch_size) / float(dataset_size)))
 
         # compute disc losses
         disc_info = sess.run(optimizer_dict["disc"] + bsrgan.d_losses, feed_dict={bsrgan.d_learning_rate: learning_rate})
