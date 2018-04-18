@@ -474,6 +474,7 @@ def compute_psnr(ref, target):
 
 
 def huber_loss(labels, predictions, delta=1.0):
+    """This function is deprecated and will be removed in future"""
     residual = tf.abs(predictions - labels)
     condition = tf.less(residual, delta)
     small_res = 0.5 * tf.square(residual)
@@ -493,16 +494,14 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
 
     if type(sampled_images) == np.ndarray:
         N, h, w, cdim = sampled_images.shape
-        idxs = np.random.choice(np.arange(N), size=(5, 5))
+        idxs = np.random.choice(np.arange(N), size=(4, 4), replace=False)
     else:
-        sampled_imgs, sampled_probs = sampled_images
-        sampled_images = sampled_imgs[sampled_probs.argsort()[::-1]]
-        idxs = np.arange(5 * 5).reshape((5, 5))
+        sampled_images, idxs = sampled_images
         N, h, w, cdim = sampled_images.shape
 
-    fig, axarr = plt.subplots(5, 5)
-    for i in range(5):
-        for j in range(5):
+    fig, axarr = plt.subplots(4, 4)
+    for i in range(4):
+        for j in range(4):
             if cdim == 1:
                 axarr[i, j].imshow(unnormalize(sampled_images[idxs[i, j]], cdim)[:, :, 0], cmap="gray")
             else:
@@ -525,7 +524,8 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
 def load_weights(sess, mode=-1):
     # load last saved weights (this function needs simplification. maybe it is possible to load wghts like in setup_vgg)
 
-    wpaths = sorted(filter(lambda x: x.startswith('weights'), os.listdir(FLAGS.checkpoint_dir)))
+    wpaths = filter(lambda x: x.startswith('weights'), os.listdir(FLAGS.checkpoint_dir))
+    wpaths = sorted(wpaths, key=lambda x: int(x[x.rfind('_') + 1 : x.rfind('.')]))
     if len(wpaths) == 0:
         raise RuntimeError('Can\'t find any weights in checkpoint directory')
 

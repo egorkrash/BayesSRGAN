@@ -6,7 +6,7 @@ FLAGS = tf.app.flags.FLAGS
 class BSRGAN(object):
     def __init__(self, hr_images, lr_images, dataset_size, batch_size=64,
                  prior_std=1.0, J=1, M=1, eta=2e-4,
-                 alpha=0.01, lrate=0.0002, optimizer='adam',
+                 alpha=0.01, lrate=0.0002, optimizer='sgd',
                  ml=False, J_d=None):
 
         # J_d and and J are amount of theta_d and theta_g samples (see 2.1, marginalizing the noise)
@@ -48,8 +48,6 @@ class BSRGAN(object):
                     wgts_ = self.generator(tf.constant(0.0, dtype=tf.float32, shape=[FLAGS.batch_size]+self.lr_dim),
                                            params=None, return_params=True, mask='_%04d_%04d' % (gi, m))[-1]
 
-                    #new_keys = map(lambda x: x + '_%04d_%04d' % (gi, m), wgts_.keys())
-                    #wgts_ = dict(zip(new_keys, wgts_.values()))
                     param_list.append(wgts_)
 
         elif scope_str == "discriminator":
@@ -58,8 +56,6 @@ class BSRGAN(object):
                     wgts_ = self.discriminator(tf.constant(0.0, dtype=tf.float32, shape=[FLAGS.batch_size]+self.hr_dim),
                                                params=None, return_params=True, mask='_%04d_%04d' % (di, m))[-1]
 
-                    #new_keys = map(lambda x: x + '_%04d_%04d' % (di, m), wgts_.keys())
-                    #wgts_ = dict(zip(new_keys, wgts_.values()))
                     param_list.append(wgts_)
         else:
             raise RuntimeError("invalid scope!")
@@ -67,9 +63,6 @@ class BSRGAN(object):
         return param_list
 
     def build_bgan_graph(self):
-        # self.hr = tf.placeholder(tf.float32, [self.batch_size] + self.hr_dim, name='real_images')
-        # define placeholder for LR images
-        # self.lr = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim + [self.num_gen], name='lr_images')
         self.lr_sampler = tf.placeholder(tf.float32, [self.batch_size] + self.lr_dim, name='lr_sampler')
 
         # initialize generator weights
@@ -92,13 +85,13 @@ class BSRGAN(object):
             # for each setting of theta_d we count losses using each setting of theta_g
             # build loss for each theta_d
             hr_sample = self.hr[:, :, :, :, 0]#di % self.num_gen]  # should we sample from p(hr) here to count real loss?
-            d_logits, _ = self.discriminator(hr_sample, disc_params)
+            d_logits = self.discriminator(hr_sample, disc_params)
             d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits,
                                                                                  labels=tf.ones_like(d_logits)))
             d_loss_fakes = []
             for gi, gen_params in enumerate(self.gen_param_list):
                 lr_sample = self.lr[:, :, :, :, gi % self.num_gen]
-                d_logits_, _ = self.discriminator(self.generator(lr_sample, gen_params), disc_params)
+                d_logits_ = self.discriminator(self.generator(lr_sample, gen_params), disc_params)
 
                 d_loss_fake_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                       labels=tf.zeros_like(d_logits_)))
@@ -133,7 +126,7 @@ class BSRGAN(object):
             for di, disc_params in enumerate(self.disc_param_list):
 
                 gen_sample = self.generator(lr_sample, gen_params)
-                d_logits_, d_features_fake = self.discriminator(gen_sample, disc_params)
+                d_logits_ = self.discriminator(gen_sample, disc_params)
 
                 # calculate features using perceptual mode vgg22/vgg54
                 if FLAGS.perceptual_mode == 'VGG22':
@@ -155,11 +148,9 @@ class BSRGAN(object):
                 diff = extracted_feature_gen - extracted_feature_target
                 content_loss = FLAGS.vgg_scaling * tf.reduce_mean(tf.reduce_sum(tf.square(diff), axis=[3]))
 
-                #_, d_features_real = self.discriminator(self.hr, disc_params)  # hr_sample
-
                 g_loss_ = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_,
                                                                                  labels=tf.ones_like(d_logits_)))
-                #g_loss_ += tf.reduce_mean(huber_loss(d_features_real[-1], d_features_fake[-1]))
+
                 g_loss_ += content_loss
                 if not self.ml:
                     g_loss_ += self.gen_prior(gen_params) + self.gen_noise(gen_params)
@@ -197,11 +188,7 @@ class BSRGAN(object):
         for j in range(2):
             model.add_residual_block(256, mapsize=mapsize)
 
-        # Spatial upscale (see http://distill.pub/2016/deconv-checkerboard/)
-        # and transposed convolution
-        # don't apply second upscaling (we need 2x factor)
-        #model.add_upscale()
-        model.add_pixel_shuffler(2)  # instead of upscaling
+        model.add_pixel_shuffler(2)
         model.add_conv2d(256, mapsize=mapsize, stride=1, stddev_factor=1.)
         model.add_batch_norm()
         model.add_relu()
@@ -211,12 +198,8 @@ class BSRGAN(object):
         # Finalization a la "all convolutional net"
 
         model.add_conv2d(96, mapsize=mapsize, stride=1, stddev_factor=2.)
-        # Worse: model.add_batch_norm()
-
         model.add_relu()
-
         model.add_conv2d(96, mapsize=1, stride=1, stddev_factor=2.)
-        # Worse: model.add_batch_norm()
         model.add_relu()
 
         # Last layer is sigmoid with no batch normalization
@@ -261,15 +244,14 @@ class BSRGAN(object):
         model.add_flatten()
         model.add_dense(100, stddev_factor=2)
         model.add_relu()
-        h_end = model.get_output()
         model.add_dense(1)
         h_out = model.get_output()
 
         disc_vars = model.params
         # model.summary()
         if return_params:
-            return h_out, h_end, disc_vars
-        return h_out, h_end
+            return h_out, disc_vars
+        return h_out
 
     def gen_prior(self, gen_params):
         prior_loss = 0.0

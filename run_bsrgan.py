@@ -8,7 +8,6 @@ import json
 from utils import print_images, load_weights, setup_vgg
 # from scipy.misc import imsave
 
-# TODO: fix saving images
 # TODO: add demo
 # TODO: add evolution plots
 # TODO: configure summary writer
@@ -55,16 +54,16 @@ tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
 tf.app.flags.DEFINE_bool('log_device_placement', False,
                          "Log the device where variables are placed.")
 
-tf.app.flags.DEFINE_integer('num_gen', 2, 'number of generators')
+tf.app.flags.DEFINE_integer('num_gen', 3, 'number of generators')
 
-tf.app.flags.DEFINE_integer('num_disc', 2, 'number of discriminators')
+tf.app.flags.DEFINE_integer('num_disc', 1, 'number of discriminators')
 
 tf.app.flags.DEFINE_integer('num_mcmc', 1, 'number of mcmc')
 
 tf.app.flags.DEFINE_integer('sample_size', 64,
                             "Image sample size in pixels. Range [64,128]")
 
-tf.app.flags.DEFINE_bool('save_weights', True, 'save weights or not')
+tf.app.flags.DEFINE_integer('checkpoint_weights', 1000, 'save weights or not (each "save_weights_iters")')
 
 tf.app.flags.DEFINE_bool('save_samples', True, 'save samples or not')
 
@@ -73,9 +72,6 @@ tf.app.flags.DEFINE_integer('summary_period', 200,
 
 tf.app.flags.DEFINE_integer('random_seed', 0,
                             "Seed used to initialize rng.")
-
-tf.app.flags.DEFINE_integer('test_vectors', 16,
-                            """Number of features to use for testing""")
 
 tf.app.flags.DEFINE_string('train_dir', 'train',
                            "Output folder where training logs are dumped.")
@@ -87,7 +83,7 @@ tf.app.flags.DEFINE_integer('train_time', 20,
 
 tf.app.flags.DEFINE_float('vgg_scaling', 0.0061, 'weight of accepting vgg features')
 
-tf.app.flags.DEFINE_string('perceptual_mode', 'VGG54', 'perceptual mode to extract features for additive loss')
+tf.app.flags.DEFINE_string('perceptual_mode', 'VGG22', 'perceptual mode to extract features for additive loss')
 
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
@@ -188,7 +184,7 @@ def train(sess):
 
     num_train_iter = FLAGS.train_iter
 
-    optimizer_dict = {"disc": bsrgan.d_optims_adam, "gen":  bsrgan.g_optims_adam}
+    optimizer_dict = {"disc": bsrgan.d_optims, "gen":  bsrgan.g_optims}  # use sgd
 
     base_learning_rate = FLAGS.learning_rate_start  # for now we use same learning rate for Ds and Gs
     lr_decay_rate = FLAGS.learning_rate_decay
@@ -228,32 +224,38 @@ def train(sess):
                 json.dump(results, fp)
 
             if FLAGS.save_samples:
-                for zi in xrange(num_gen):
-                    _imgs, _ps = [], []
+                if FLAGS.batch_size >= 16:  # take 16 samples to save from single batch (because it is fast)
+                    lr, hr = sess.run([features, labels])  # run both to keep correspondence
+                    idxs = np.random.choice(np.arange(FLAGS.batch_size), size=(4, 4), replace=False)
+                    for zi in xrange(num_gen):
 
-                    for _ in range(10):
-                        lr, hr = sess.run([features, labels])  # run both to keep correspondence
+                        # returns [batch_size, 64, 64, 3]
                         sampled_imgs = sess.run(bsrgan.gen_samplers[zi * num_mcmc],
                                                 feed_dict={bsrgan.lr_sampler: lr[:, :, :, :, 0]})
 
-                        _imgs.append(sampled_imgs)
-                    sampled_imgs = np.concatenate(_imgs)
+                        generated = (sampled_imgs, idxs)
+                        print_images(generated, "BSRGAN_%i_%.2f" % (zi, g_losses[zi * num_mcmc]),
+                                     train_iter, directory=FLAGS.checkpoint_dir)
 
-                    print_images(sampled_imgs, "BSRGAN_%i_%.2f" % (zi, g_losses[zi * num_mcmc]),
-                                 train_iter, directory=FLAGS.checkpoint_dir)
-
+                    original_hrs = (hr[:, :, :, :, 0], idxs)
+                    original_lrs = (lr[:, :, :, :, 0], idxs)
+                    print_images(original_hrs, "HR", train_iter, directory=FLAGS.checkpoint_dir)
+                    print_images(original_lrs, "LR", train_iter, directory=FLAGS.checkpoint_dir)
+                    print ("samples saved!")
+                else:
+                    print ("cannot save samples. batch size must be >=16")
                 # imsave(FLAGS.checkpoint_dir + '/lr_%i.png' % train_iter, lr)  # check correspondence
                 # imsave(FLAGS.checkpoint_dir + '/hr_%i.png' % train_iter, hr)
-                # print_images(sess.run(labels), "RAW", train_iter, directory=FLAGS.checkpoint_dir)
 
-                if FLAGS.save_weights:
+            if FLAGS.checkpoint_weights > 0:
+                if train_iter % FLAGS.checkpoint_weights == 0:
                     var_dict = {}
                     for var in tf.trainable_variables():
                         var_dict[var.name] = sess.run(var.name)
 
                     np.savez_compressed(os.path.join(FLAGS.checkpoint_dir, "weights_%i.npz" % train_iter), **var_dict)
 
-                print("done")
+                print("weights saved!")
 
     print 'Finished training!'
 
