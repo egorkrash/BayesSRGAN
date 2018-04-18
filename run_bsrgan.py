@@ -6,7 +6,6 @@ from arch import BSRGAN
 import time
 import json
 from utils import print_images, load_weights, setup_vgg
-# from scipy.misc import imsave
 
 # TODO: add demo
 # TODO: add evolution plots
@@ -46,7 +45,7 @@ tf.app.flags.DEFINE_float('learning_beta1', 0.5,
 tf.app.flags.DEFINE_float('learning_rate_start', 0.00020,
                           "Starting learning rate used for AdamOptimizer")
 
-tf.app.flags.DEFINE_float('learning_rate_decay', 1.0, 'lr decay')
+tf.app.flags.DEFINE_float('learning_rate_decay', 0.5, 'lr decay')
 
 tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
                             "Number of batches until learning rate is halved")
@@ -54,7 +53,7 @@ tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
 tf.app.flags.DEFINE_bool('log_device_placement', False,
                          "Log the device where variables are placed.")
 
-tf.app.flags.DEFINE_integer('num_gen', 3, 'number of generators')
+tf.app.flags.DEFINE_integer('num_gen', 4, 'number of generators')
 
 tf.app.flags.DEFINE_integer('num_disc', 1, 'number of discriminators')
 
@@ -63,7 +62,7 @@ tf.app.flags.DEFINE_integer('num_mcmc', 1, 'number of mcmc')
 tf.app.flags.DEFINE_integer('sample_size', 64,
                             "Image sample size in pixels. Range [64,128]")
 
-tf.app.flags.DEFINE_integer('checkpoint_weights', 1000, 'save weights or not (each "save_weights_iters")')
+tf.app.flags.DEFINE_integer('checkpoint_weights', 100, 'save weights or not (each "save_weights_iters")')
 
 tf.app.flags.DEFINE_bool('save_samples', True, 'save samples or not')
 
@@ -81,7 +80,7 @@ tf.app.flags.DEFINE_integer('train_iter', 2000, 'number of training iterations')
 tf.app.flags.DEFINE_integer('train_time', 20,
                             "Time in minutes to train the model")
 
-tf.app.flags.DEFINE_float('vgg_scaling', 0.0061, 'weight of accepting vgg features')
+tf.app.flags.DEFINE_float('vgg_scaling', 0.5, 'weight of accepting vgg features')
 
 tf.app.flags.DEFINE_string('perceptual_mode', 'VGG22', 'perceptual mode to extract features for additive loss')
 
@@ -255,7 +254,7 @@ def train(sess):
 
                     np.savez_compressed(os.path.join(FLAGS.checkpoint_dir, "weights_%i.npz" % train_iter), **var_dict)
 
-                print("weights saved!")
+                    print("weights saved!")
 
     print 'Finished training!'
 
