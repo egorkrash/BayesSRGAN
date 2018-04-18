@@ -1,4 +1,6 @@
 # create custom model class
+import warnings
+
 import numpy as np
 import tensorflow as tf
 from collections import OrderedDict
@@ -447,7 +449,9 @@ def VGG19_slim(input, type, reuse, scope):
 
 
 def downscale(images, K):
-    """Differentiable image downscaling by a factor of K"""
+
+    warnings.warn("this function will be removed in future.", FutureWarning)
+
     arr = np.zeros([K, K, 3, 3])
     arr[:, :, 0, 0] = 1.0 / (K * K)
     arr[:, :, 1, 1] = 1.0 / (K * K)
@@ -474,7 +478,9 @@ def compute_psnr(ref, target):
 
 
 def huber_loss(labels, predictions, delta=1.0):
-    """This function is deprecated and will be removed in future"""
+
+    warnings.warn("this function will be removed in future.", FutureWarning)
+
     residual = tf.abs(predictions - labels)
     condition = tf.less(residual, delta)
     small_res = 0.5 * tf.square(residual)

@@ -146,19 +146,13 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     return features, labels
 
 
-def main(argv=None):
-    tf.reset_default_graph()
-    sess, summary_writer = setup_tensorflow()
-    train(sess)
-
-
 def train(sess):
     filenames = map(lambda x: os.path.join(FLAGS.dataset, x), os.listdir(FLAGS.dataset))
     features, labels = setup_inputs(sess, filenames)
 
     dataset_size = len(filenames)
     batch_size = FLAGS.batch_size
-    start_iter = 0  # in case we don't load any weights
+    start_iter = 1  # in case we don't load any weights
 
     num_gen = FLAGS.num_gen
     num_disc = FLAGS.num_disc
@@ -243,20 +237,24 @@ def train(sess):
                     print ("samples saved!")
                 else:
                     print ("cannot save samples. batch size must be >=16")
-                # imsave(FLAGS.checkpoint_dir + '/lr_%i.png' % train_iter, lr)  # check correspondence
-                # imsave(FLAGS.checkpoint_dir + '/hr_%i.png' % train_iter, hr)
 
-            if FLAGS.checkpoint_weights > 0:
-                if train_iter % FLAGS.checkpoint_weights == 0:
-                    var_dict = {}
-                    for var in tf.trainable_variables():
-                        var_dict[var.name] = sess.run(var.name)
+            if FLAGS.checkpoint_weights > 0 and train_iter % FLAGS.checkpoint_weights == 0:
+                var_dict = {}
+                for var in tf.trainable_variables():
+                    var_dict[var.name] = sess.run(var.name)
 
-                    np.savez_compressed(os.path.join(FLAGS.checkpoint_dir, "weights_%i.npz" % train_iter), **var_dict)
+                np.savez_compressed(os.path.join(FLAGS.checkpoint_dir, "weights_%i.npz" % train_iter), **var_dict)
 
-                    print("weights saved!")
+                print("weights saved!")
 
     print 'Finished training!'
+
+
+def main(argv=None):
+    tf.reset_default_graph()
+    sess, summary_writer = setup_tensorflow()
+    train(sess)
+
 
 if __name__ == '__main__':
     tf.app.run()
