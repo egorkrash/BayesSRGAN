@@ -5,14 +5,12 @@ import tensorflow as tf
 from arch import BSRGAN
 import time
 import json
-from utils import print_images, load_weights, setup_vgg
+from utils import print_images, load_weights, setup_vgg, save_single_image
 
-# TODO: add demo
 # TODO: add evolution plots
 # TODO: configure summary writer
 # TODO: fix num mcmc
-# Questions:
-# how to sample at the end (assume I have x generators and x discriminators trained)? Should I just take the best gen?
+# TODO: separate disc and gen training
 
 # Configuration (alphabetically)
 
@@ -28,12 +26,15 @@ tf.app.flags.DEFINE_integer('checkpoint_period', 100,
 tf.app.flags.DEFINE_string('dataset', 'dataset',
                            "Path to the dataset directory.")
 
-tf.app.flags.DEFINE_integer('mode', -1, 'start of training continuation')
+tf.app.flags.DEFINE_string('demo_dir', 'demo',
+                           'Output folder where demo samples are dumped.')
+
+tf.app.flags.DEFINE_integer('restore_mode', -1, 'start of training continuation')
 
 tf.app.flags.DEFINE_float('epsilon', 1e-8,
                           "Fuzz term to avoid numerical instability")
 
-tf.app.flags.DEFINE_string('run', 'demo',
+tf.app.flags.DEFINE_string('run_mode', 'train',
                            "Which operation to run. [demo|train]")
 
 tf.app.flags.DEFINE_float('gene_l1_factor', .90,
@@ -77,9 +78,6 @@ tf.app.flags.DEFINE_string('train_dir', 'train',
 
 tf.app.flags.DEFINE_integer('train_iter', 2000, 'number of training iterations')
 
-tf.app.flags.DEFINE_integer('train_time', 20,
-                            "Time in minutes to train the model")
-
 tf.app.flags.DEFINE_float('vgg_scaling', 0.5, 'weight of accepting vgg features')
 
 tf.app.flags.DEFINE_string('perceptual_mode', 'VGG22', 'perceptual mode to extract features for additive loss')
@@ -87,6 +85,7 @@ tf.app.flags.DEFINE_string('perceptual_mode', 'VGG22', 'perceptual mode to extra
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
 tf.app.flags.DEFINE_bool('continue_training', True, 'continue training process or not')
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -114,6 +113,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
 
     # Read each JPEG file
     reader = tf.WholeFileReader()
+    np.random.shuffle(filenames)
     filename_queue = tf.train.string_input_producer(filenames)
     key, value = reader.read(filename_queue)
     channels = 3
@@ -146,7 +146,7 @@ def setup_inputs(sess, filenames, image_size=None, capacity_factor=3):
     return features, labels
 
 
-def train(sess):
+def run(sess):
     filenames = map(lambda x: os.path.join(FLAGS.dataset, x), os.listdir(FLAGS.dataset))
     features, labels = setup_inputs(sess, filenames)
 
@@ -172,9 +172,16 @@ def train(sess):
     sess.run(tf.global_variables_initializer())
 
     if FLAGS.continue_training:
-        start_iter = load_weights(sess, mode=FLAGS.mode)
-    # ==================================================================================================================
+        start_iter = load_weights(sess, mode=FLAGS.restore_mode)
 
+    # ==================================================================================================================
+    if FLAGS.run_mode == 'demo':
+        print 'Running in demo mode'
+        demo(sess, bsrgan, features, labels)
+        return
+    # ==================================================================================================================
+    assert FLAGS.run_mode == 'train', 'run_mode can be whether train|demo'
+    print 'Running in train mode'
     num_train_iter = FLAGS.train_iter
 
     optimizer_dict = {"disc": bsrgan.d_optims, "gen":  bsrgan.g_optims}  # use sgd
@@ -193,7 +200,8 @@ def train(sess):
                                                     min(1.0, (train_iter * batch_size) / float(dataset_size)))
 
         # compute disc losses
-        disc_info = sess.run(optimizer_dict["disc"] + bsrgan.d_losses, feed_dict={bsrgan.d_learning_rate: learning_rate})
+        disc_info = sess.run(optimizer_dict["disc"] + bsrgan.d_losses,
+                             feed_dict={bsrgan.d_learning_rate: learning_rate})
 
         d_losses = disc_info[num_disc:num_disc * 2]
 
@@ -248,12 +256,28 @@ def train(sess):
                 print("weights saved!")
 
     print 'Finished training!'
+    return
+
+
+def demo(sess, model, features, labels):
+    samplers = model.gen_samplers
+    # samples_path is path to testing images
+    lr, hr = sess.run([features, labels])  # run both to keep correspondence
+    j = np.random.randint(0, FLAGS.batch_size)
+    for i, sampler in enumerate(samplers):
+        generated = sess.run(sampler, feed_dict={model.lr_sampler: lr[:, :, :, :, 0]})
+        save_single_image(generated[j], FLAGS.demo_dir, 'BSRGAN_%d.png' % (i+1))
+    save_single_image(hr[j, :, :, :, 0], FLAGS.demo_dir, 'ORIGINAL.png')
+    save_single_image(lr[j, :, :, :, 0], FLAGS.demo_dir, 'LOWRES.png')
+    message = raw_input('Is it great?  ')
+    if not message == 'yes':
+        demo(sess, model, features, labels)
 
 
 def main(argv=None):
     tf.reset_default_graph()
     sess, summary_writer = setup_tensorflow()
-    train(sess)
+    run(sess)
 
 
 if __name__ == '__main__':

@@ -6,6 +6,7 @@ import tensorflow as tf
 from collections import OrderedDict
 import tensorflow.contrib.slim as slim
 import matplotlib.pyplot as plt
+from scipy.misc import imsave
 import os
 FLAGS = tf.app.flags.FLAGS
 
@@ -525,6 +526,11 @@ def print_images(sampled_images, label, index, directory, save_all_samples=False
     if "raw" not in label.lower() and save_all_samples:
         np.savez_compressed(os.path.join(directory, "samples_%s_%i.npz" % (label, index)),
                             samples=sampled_images)
+
+
+def save_single_image(image_array, name, directory):
+    full_name = os.path.join(name, directory)
+    imsave(full_name, image_array)
 
 
 def load_weights(sess, mode=-1):

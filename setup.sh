@@ -25,7 +25,8 @@ cd ..
 
 # make checkpoint directory for training
 mkdir checkpoint/
+mkdir demo
 
-# download BSRGAN weights for default setting
+# download BSRGAN weights for default setting (J_g=1, J_d=1, M=1)
 cd checkpoint/
 wget https://www.dropbox.com/s/rqb9px5abjvueu6/weights_10000.npz
