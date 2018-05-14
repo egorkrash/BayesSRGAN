@@ -34,7 +34,7 @@ tf.app.flags.DEFINE_integer('restore_mode', -1, 'start of training continuation'
 tf.app.flags.DEFINE_float('epsilon', 1e-8,
                           "Fuzz term to avoid numerical instability")
 
-tf.app.flags.DEFINE_string('run_mode', 'train',
+tf.app.flags.DEFINE_string('run_mode', 'demo',
                            "Which operation to run. [demo|train]")
 
 tf.app.flags.DEFINE_float('gene_l1_factor', .90,
@@ -54,7 +54,7 @@ tf.app.flags.DEFINE_integer('learning_rate_half_life', 5000,
 tf.app.flags.DEFINE_bool('log_device_placement', False,
                          "Log the device where variables are placed.")
 
-tf.app.flags.DEFINE_integer('num_gen', 4, 'number of generators')
+tf.app.flags.DEFINE_integer('num_gen', 1, 'number of generators')
 
 tf.app.flags.DEFINE_integer('num_disc', 1, 'number of discriminators')
 
@@ -84,7 +84,7 @@ tf.app.flags.DEFINE_string('perceptual_mode', 'VGG22', 'perceptual mode to extra
 
 tf.app.flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file for the vgg19')
 
-tf.app.flags.DEFINE_bool('continue_training', True, 'continue training process or not')
+tf.app.flags.DEFINE_bool('continue_training', False, 'continue training process or not')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -177,7 +177,7 @@ def run(sess):
     # ==================================================================================================================
     if FLAGS.run_mode == 'demo':
         print 'Running in demo mode'
-        demo(sess, bsrgan, features, labels)
+        demo(sess, bsrgan, features, labels, start_iter)
         return
     # ==================================================================================================================
     assert FLAGS.run_mode == 'train', 'run_mode can be whether train|demo'
@@ -259,19 +259,19 @@ def run(sess):
     return
 
 
-def demo(sess, model, features, labels):
+def demo(sess, model, features, labels, triter):
     samplers = model.gen_samplers
-    # samples_path is path to testing images
-    lr, hr = sess.run([features, labels])  # run both to keep correspondence
+    lr, hr = sess.run([features, labels])
     j = np.random.randint(0, FLAGS.batch_size)
     for i, sampler in enumerate(samplers):
         generated = sess.run(sampler, feed_dict={model.lr_sampler: lr[:, :, :, :, 0]})
-        save_single_image(generated[j], FLAGS.demo_dir, 'BSRGAN_%d.png' % (i+1))
-    save_single_image(hr[j, :, :, :, 0], FLAGS.demo_dir, 'ORIGINAL.png')
-    save_single_image(lr[j, :, :, :, 0], FLAGS.demo_dir, 'LOWRES.png')
-    message = raw_input('Is it great?  ')
-    if not message == 'yes':
-        demo(sess, model, features, labels)
+        save_single_image(generated[j], FLAGS.demo_dir, 'BSRGAN_%d_%d.png' % (i+1, triter - 1))
+    save_single_image(hr[j, :, :, :, 0], FLAGS.demo_dir, 'ORIGINAL_%d.png' % (triter - 1))
+    save_single_image(lr[j, :, :, :, 0], FLAGS.demo_dir, 'LOWRES_%d.png' % (triter - 1))
+    message = raw_input('Another one?  ')
+
+    if message == 'yes':
+        demo(sess, model, features, labels, triter)
 
 
 def main(argv=None):
